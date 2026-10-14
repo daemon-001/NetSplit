@@ -115,6 +115,15 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
 
   refreshAll: async () => {
+    try {
+      if (!defaultIpcClient.getToken() && typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { getToken: () => Promise<string | null> } }).netSplitHost?.getToken) {
+        const token = await (window as unknown as { netSplitHost: { getToken: () => Promise<string | null> } }).netSplitHost.getToken();
+        if (token) {
+          defaultIpcClient.setToken(token);
+        }
+      }
+    } catch {}
+
     set({ isLoading: true, lastError: null });
     try {
       const [status, adapters, apps, cfg, activity] = await Promise.all([

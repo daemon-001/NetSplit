@@ -133,8 +133,6 @@ void IpcServer::LogActivity(const std::string& level, const std::string& categor
 }
 
 bool IpcServer::Start() {
-    GenerateAndSaveToken();
-
     m_listenSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (m_listenSock == INVALID_SOCKET) return false;
 
@@ -158,6 +156,9 @@ bool IpcServer::Start() {
         m_listenSock = INVALID_SOCKET;
         return false;
     }
+
+    // Only generate & write token once socket is successfully listening
+    GenerateAndSaveToken();
 
     m_running = true;
     m_serverThread = std::thread(&IpcServer::ServerLoop, this);
@@ -261,8 +262,7 @@ void IpcServer::HandleClient(SOCKET clientSock) {
 
     // Authenticate token: check header or query parameter
     bool authorized = false;
-    std::string authHeader = "Authorization: Bearer " + m_authToken;
-    if (req.find(authHeader) != std::string::npos || req.find("token=" + m_authToken) != std::string::npos) {
+    if (!m_authToken.empty() && req.find(m_authToken) != std::string::npos) {
         authorized = true;
     }
 

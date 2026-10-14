@@ -198,6 +198,14 @@ bool UninstallService() {
 }
 
 int main(int argc, char* argv[]) {
+    // Ensure only one service instance runs at a time
+    HANDLE hSingleInstance = CreateMutexW(NULL, TRUE, L"Local\\NetSplitService_SingleInstance");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        printf("[NetSplit] Service instance is already running.\n");
+        if (hSingleInstance) CloseHandle(hSingleInstance);
+        return 0;
+    }
+
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 
     if (argc > 1) {

@@ -34,7 +34,7 @@ export class IpcClient {
     return this.token;
   }
 
-  private async call<T>(method: string, params?: unknown): Promise<T> {
+  private async call<T>(method: string, params?: unknown, retryOnAuth = true): Promise<T> {
     const id = `req-${this.reqIdCounter++}`;
     const payload = {
       jsonrpc: '2.0',
@@ -60,7 +60,15 @@ export class IpcClient {
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
+        if (response.status === 401 && retryOnAuth) {
+          // Attempt to retrieve fresh token from host window
+          if (typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { getToken: () => Promise<string | null> } }).netSplitHost?.getToken) {
+            const freshToken = await (window as unknown as { netSplitHost: { getToken: () => Promise<string | null> } }).netSplitHost.getToken();
+            if (freshToken && freshToken !== this.token) {
+              this.setToken(freshToken);
+              return this.call<T>(method, params, false);
+            }
+          }
           throw new Error('Unauthorized: Invalid or missing IPC authentication token');
         }
         throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
