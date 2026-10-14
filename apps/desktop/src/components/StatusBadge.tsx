@@ -13,7 +13,7 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, label, size = 
   const themeMode = useNetSplitStore((state) => state.themeMode);
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
-  const normalized = status.toUpperCase();
+  const normalized = (status || 'NONE').toUpperCase();
 
   let dotColor = theme.textTertiary;
   let bg = theme.badgeBg;

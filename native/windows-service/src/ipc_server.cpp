@@ -423,6 +423,11 @@ std::string IpcServer::HandleListApp(const std::string& reqId) {
         ss << "\"version\":\"" << JsonEscape(WStringToString(app.version)) << "\",";
         ss << "\"isRunning\":" << (app.isRunning ? "true" : "false") << ",";
         ss << "\"isSystemProcess\":" << (app.isSystemProcess ? "true" : "false") << ",";
+        ss << "\"processIds\":[";
+        for (size_t pidIdx = 0; pidIdx < app.processIds.size(); ++pidIdx) {
+            ss << app.processIds[pidIdx] << (pidIdx + 1 < app.processIds.size() ? "," : "");
+        }
+        ss << "],";
 
         // Assignment lookup
         AssignmentRule* pRule = m_pAssignMgr->FindRuleByAppId(app.id);

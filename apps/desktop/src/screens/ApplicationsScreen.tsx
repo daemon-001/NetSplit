@@ -186,7 +186,13 @@ export const ApplicationsScreen: React.FC = () => {
               <View style={styles.colProcess}>
                 <StatusBadge
                   status={item.isRunning ? 'RUNNING' : 'STOPPED'}
-                  label={item.isRunning ? `Running (${item.processIds.length})` : 'Stopped'}
+                  label={
+                    item.isRunning
+                      ? item.processIds && item.processIds.length > 0
+                        ? `Running (${item.processIds.length})`
+                        : 'Running'
+                      : 'Stopped'
+                  }
                 />
               </View>
 
@@ -201,7 +207,7 @@ export const ApplicationsScreen: React.FC = () => {
 
               {/* Rule Status Badge */}
               <View style={styles.colRuleStatus}>
-                <StatusBadge status={item.ruleStatus} />
+                <StatusBadge status={item.ruleStatus || 'NONE'} />
               </View>
             </View>
           );
