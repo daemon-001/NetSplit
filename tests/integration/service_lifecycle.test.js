@@ -9,7 +9,28 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const SERVICE_EXE = path.resolve(__dirname, '../../native/windows-service/NetSplitService.exe');
-const TOKEN_PATH = path.join(process.env.LOCALAPPDATA || 'C:\\', 'NetSplit', 'ipc_auth.token');
+function getActiveToken() {
+  const localToken = path.join(process.env.LOCALAPPDATA || 'C:\\', 'NetSplit', 'ipc_auth.token');
+  const progToken = path.join(process.env.ProgramData || 'C:\\ProgramData', 'NetSplit', 'ipc_auth.token');
+  const candidates = [];
+  if (fs.existsSync(localToken)) {
+    try {
+      const stat = fs.statSync(localToken);
+      const tok = fs.readFileSync(localToken, 'utf8').trim();
+      if (tok && tok.length === 64) candidates.push({ token: tok, mtime: stat.mtimeMs });
+    } catch {}
+  }
+  if (fs.existsSync(progToken)) {
+    try {
+      const stat = fs.statSync(progToken);
+      const tok = fs.readFileSync(progToken, 'utf8').trim();
+      if (tok && tok.length === 64) candidates.push({ token: tok, mtime: stat.mtimeMs });
+    } catch {}
+  }
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.mtime - a.mtime);
+  return candidates[0].token;
+}
 
 describe('Service Daemon & Live IPC Integration Tests', () => {
   let serviceProc = null;
@@ -20,16 +41,23 @@ describe('Service Daemon & Live IPC Integration Tests', () => {
   });
 
   test('Service starts and generates ephemeral token', async () => {
-    serviceProc = spawn(SERVICE_EXE, [], {
-      detached: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    // Check if service is already actively listening
+    let isAlive = false;
+    try {
+      const ping = await fetch('http://127.0.0.1:48192', { method: 'OPTIONS' });
+      if (ping.ok || ping.status === 204) isAlive = true;
+    } catch {}
 
-    // Wait for startup
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (!isAlive) {
+      serviceProc = spawn(SERVICE_EXE, [], {
+        detached: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
 
-    assert.ok(fs.existsSync(TOKEN_PATH), `Token file not generated at ${TOKEN_PATH}`);
-    authToken = fs.readFileSync(TOKEN_PATH, 'utf8').trim();
+    authToken = getActiveToken();
+    assert.ok(authToken, `Token not found in LOCALAPPDATA or ProgramData`);
     assert.strictEqual(authToken.length, 64, 'Token must be 64-char hex string (256-bit)');
   });
 

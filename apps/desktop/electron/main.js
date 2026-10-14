@@ -19,20 +19,33 @@ function getToken() {
   const programData = process.env.PROGRAMDATA || 'C:\\ProgramData';
   
   const localTokenPath = path.join(localAppData, 'NetSplit', 'ipc_auth.token');
+  const progTokenPath = path.join(programData, 'NetSplit', 'ipc_auth.token');
+
+  const candidates = [];
   if (fs.existsSync(localTokenPath)) {
     try {
-      return fs.readFileSync(localTokenPath, 'utf8').trim();
+      const stat = fs.statSync(localTokenPath);
+      const token = fs.readFileSync(localTokenPath, 'utf8').trim();
+      if (token && token.length === 64) {
+        candidates.push({ token, mtime: stat.mtimeMs });
+      }
     } catch {}
   }
 
-  const progTokenPath = path.join(programData, 'NetSplit', 'ipc_auth.token');
   if (fs.existsSync(progTokenPath)) {
     try {
-      return fs.readFileSync(progTokenPath, 'utf8').trim();
+      const stat = fs.statSync(progTokenPath);
+      const token = fs.readFileSync(progTokenPath, 'utf8').trim();
+      if (token && token.length === 64) {
+        candidates.push({ token, mtime: stat.mtimeMs });
+      }
     } catch {}
   }
 
-  return null;
+  if (candidates.length === 0) return null;
+  // Sort descending by mtime so the most freshly generated token is always preferred
+  candidates.sort((a, b) => b.mtime - a.mtime);
+  return candidates[0].token;
 }
 
 function checkServiceHealth() {
@@ -152,18 +165,63 @@ ipcMain.handle('get-token', async () => {
 });
 
 ipcMain.handle('elevate-service', async () => {
-  const serviceExe = getServicePath();
+  const scriptPath = path.resolve(__dirname, '../../../scripts/elevate-service.ps1');
   const { exec } = require('child_process');
   
-  // Cleanly terminate any running instance via WMI and taskkill
-  const killCmd = `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \\"Name = 'NetSplitService.exe'\\") | Invoke-CimMethod -MethodName Terminate; taskkill /F /IM NetSplitService.exe"`;
-  exec(killCmd, () => {
-    setTimeout(() => {
-      const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
-      exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`);
-    }, 300);
+  console.log('[Electron] Requesting elevated service restart via helper script...');
+
+  // 1. Try to request clean shutdown of running daemon first if we have a token
+  const currentToken = getToken();
+  if (currentToken) {
+    try {
+      const http = require('http');
+      await new Promise((resolve) => {
+        const payload = JSON.stringify({ jsonrpc: '2.0', id: 'shutdown', method: 'system.shutdown' });
+        const req = http.request({
+          host: '127.0.0.1',
+          port: 48192,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentToken}`,
+            'Content-Length': Buffer.byteLength(payload),
+          },
+          timeout: 1000,
+        }, () => resolve());
+        req.on('error', () => resolve());
+        req.on('timeout', () => { req.destroy(); resolve(); });
+        req.write(payload);
+        req.end();
+      });
+      await new Promise((r) => setTimeout(r, 400));
+    } catch {}
+  }
+
+  // 2. Run elevate-service.ps1 elevated via UAC RunAs
+  const psCmd = `Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"${scriptPath}\"' -Verb RunAs -Wait`;
+  await new Promise((resolve) => {
+    exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`, () => {
+      resolve();
+    });
   });
-  return true;
+
+  // 3. Poll for service health and fresh token
+  let freshToken = null;
+  for (let i = 0; i < 24; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    const healthy = await checkServiceHealth();
+    if (healthy) {
+      freshToken = getToken();
+      if (freshToken) break;
+    }
+  }
+
+  console.log('[Electron] Service restart complete. Healthy token:', !!freshToken);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('service-restarted', { token: freshToken });
+  }
+
+  return { success: !!freshToken, token: freshToken };
 });
 
 ipcMain.handle('install-service', async () => {

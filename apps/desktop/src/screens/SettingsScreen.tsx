@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
+import { defaultIpcClient } from '../services/ipcClient';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { ShieldIcon, CheckIcon, NetworkIcon, WifiIcon, EthernetIcon } from '../components/Icons';
 
@@ -13,6 +14,24 @@ export const SettingsScreen: React.FC = () => {
   const adapters = useNetSplitStore((state) => state.adapters);
   const systemStatus = useNetSplitStore((state) => state.systemStatus);
   const serviceConnected = useNetSplitStore((state) => state.serviceConnected);
+  const refreshAll = useNetSplitStore((state) => state.refreshAll);
+
+  const [isRestarting, setIsRestarting] = useState(false);
+
+  const handleRestartElevated = async () => {
+    setIsRestarting(true);
+    try {
+      const res = await (window as any).netSplitHost?.elevateService?.();
+      if (res?.token) {
+        defaultIpcClient.setToken(res.token);
+      }
+      await refreshAll();
+    } catch (e) {
+      console.warn('Elevate service error:', e);
+    } finally {
+      setIsRestarting(false);
+    }
+  };
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -297,15 +316,25 @@ export const SettingsScreen: React.FC = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.installServiceBtn, { backgroundColor: theme.surfaceHover, borderWidth: 1, borderColor: theme.border }]}
-            onPress={() => (window as any).netSplitHost?.elevateService?.()}
+            style={[
+              styles.installServiceBtn,
+              {
+                backgroundColor: isRestarting ? theme.surfaceSubtle : theme.surfaceHover,
+                borderWidth: 1,
+                borderColor: theme.border,
+                opacity: isRestarting ? 0.7 : 1,
+              },
+            ]}
+            onPress={handleRestartElevated}
+            disabled={isRestarting}
           >
             <Text style={{ color: theme.textPrimary, fontSize: 12 }}>
-              ⚡ Restart Service Elevated
+              {isRestarting ? '⏳ Restarting Service...' : '⚡ Restart Service Elevated'}
             </Text>
           </TouchableOpacity>
         </View>
       </View>
+
 
       {/* Uninstall and Clean Recovery Guidance */}
       <View style={[styles.card, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>

@@ -25,6 +25,16 @@ export const App: React.FC = () => {
   useEffect(() => {
     init();
 
+    // Listen for service restart events from Electron host
+    if (typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { onServiceRestarted?: (cb: (data: { token?: string }) => void) => void } }).netSplitHost?.onServiceRestarted) {
+      (window as unknown as { netSplitHost: { onServiceRestarted: (cb: (data: { token?: string }) => void) => void } }).netSplitHost.onServiceRestarted((data) => {
+        if (data?.token) {
+          defaultIpcClient.setToken(data.token);
+        }
+        refreshAll();
+      });
+    }
+
     // Periodic sync every 4 seconds to maintain fresh telemetry
     const interval = setInterval(() => {
       refreshAll();
