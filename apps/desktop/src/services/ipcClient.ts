@@ -129,7 +129,17 @@ export class IpcClient {
     return this.call<VerifyRulesResult>('rule.verify');
   }
 
-  // Configuration
+  // Configuration & Default Adapter
+  public async setDefaultAdapter(
+    adapterId: string,
+    policy?: 'WINDOWS_DEFAULT' | 'PREFER_ADAPTER'
+  ): Promise<{ success: boolean; defaultAdapterId: string; defaultRoutingPolicy: string }> {
+    return this.call<{ success: boolean; defaultAdapterId: string; defaultRoutingPolicy: string }>('adapter.setDefault', {
+      adapterId,
+      policy,
+    });
+  }
+
   public async getConfig(): Promise<GlobalSettings> {
     return this.call<GlobalSettings>('config.get');
   }

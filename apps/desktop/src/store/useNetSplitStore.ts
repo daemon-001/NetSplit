@@ -54,6 +54,7 @@ interface NetSplitState {
   verifyRules: () => Promise<void>;
   addManualApp: (path: string, customName?: string) => Promise<boolean>;
   updateSettings: (settings: Partial<GlobalSettings>) => Promise<void>;
+  setDefaultAdapter: (adapterId: string, policy?: 'WINDOWS_DEFAULT' | 'PREFER_ADAPTER') => Promise<void>;
 }
 
 export const useNetSplitStore = create<NetSplitState>((set, get) => ({
@@ -280,6 +281,25 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       set((state) => ({
         settings: { ...state.settings, ...settings },
       }));
+      await get().refreshAll();
+    } catch (err: unknown) {
+      set({ lastError: String(err) });
+    }
+  },
+
+  setDefaultAdapter: async (adapterId, policy) => {
+    try {
+      const res = await defaultIpcClient.setDefaultAdapter(adapterId, policy);
+      if (res.success) {
+        set((state) => ({
+          settings: {
+            ...state.settings,
+            defaultAdapterId: res.defaultAdapterId,
+            defaultRoutingPolicy: res.defaultRoutingPolicy as any,
+          },
+        }));
+        await get().refreshAll();
+      }
     } catch (err: unknown) {
       set({ lastError: String(err) });
     }

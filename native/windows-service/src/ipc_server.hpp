@@ -64,5 +64,6 @@ private:
     std::string HandleVerifyRules(const std::string& reqId);
     std::string HandleGetConfig(const std::string& reqId);
     std::string HandleSetConfig(const std::string& reqId, const std::string& body);
+    std::string HandleSetDefaultAdapter(const std::string& reqId, const std::string& body);
     std::string HandleListActivity(const std::string& reqId);
 };

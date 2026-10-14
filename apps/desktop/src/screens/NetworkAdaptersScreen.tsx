@@ -11,6 +11,8 @@ export const NetworkAdaptersScreen: React.FC = () => {
   const themeMode = useNetSplitStore((state) => state.themeMode);
   const adapters = useNetSplitStore((state) => state.adapters);
   const apps = useNetSplitStore((state) => state.apps);
+  const settings = useNetSplitStore((state) => state.settings);
+  const setDefaultAdapter = useNetSplitStore((state) => state.setDefaultAdapter);
   const removeAssignment = useNetSplitStore((state) => state.removeAssignment);
   const setCurrentScreen = useNetSplitStore((state) => state.setCurrentScreen);
 
@@ -26,6 +28,15 @@ export const NetworkAdaptersScreen: React.FC = () => {
     if (bps >= 1000000) return `${(bps / 1000000).toFixed(0)} Mbps`;
     return `${(bps / 1000).toFixed(0)} Kbps`;
   };
+
+  const isAdapterDefault = (adapterId: string, isDefaultRoute: boolean) => {
+    if (settings.defaultRoutingPolicy === 'PREFER_ADAPTER') {
+      return settings.defaultAdapterId === adapterId;
+    }
+    return isDefaultRoute;
+  };
+
+  const activeIsDefault = activeAdapter ? isAdapterDefault(activeAdapter.id, activeAdapter.isDefaultRoute) : false;
 
   return (
     <View style={styles.container}>
@@ -43,6 +54,7 @@ export const NetworkAdaptersScreen: React.FC = () => {
             const isWifi = adapter.type === 'WIFI';
             const isUp = adapter.status === 'UP';
             const appCount = apps.filter((a) => a.assignedAdapterId === adapter.id).length;
+            const isDefault = isAdapterDefault(adapter.id, adapter.isDefaultRoute);
 
             return (
               <TouchableOpacity
@@ -71,9 +83,16 @@ export const NetworkAdaptersScreen: React.FC = () => {
                     </Text>
                     <StatusBadge status={adapter.status} size="sm" />
                   </View>
-                  <Text style={[styles.itemSub, { color: theme.textTertiary }]}>
-                    {adapter.type} • {formatLinkSpeed(adapter.linkSpeedBps)}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                    <Text style={[styles.itemSub, { color: theme.textTertiary }]}>
+                      {adapter.type} • {formatLinkSpeed(adapter.linkSpeedBps, adapter.status)}
+                    </Text>
+                    {isDefault && (
+                      <View style={[styles.defaultTag, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
+                        <Text style={[styles.defaultTagText, { color: theme.accent }]}>DEFAULT</Text>
+                      </View>
+                    )}
+                  </View>
                   {appCount > 0 && (
                     <Text style={[styles.itemAppCount, { color: theme.accent }]}>
                       {appCount} assigned application{appCount > 1 ? 's' : ''}
@@ -91,14 +110,60 @@ export const NetworkAdaptersScreen: React.FC = () => {
         <ScrollView style={styles.detailPane} contentContainerStyle={{ padding: spacing.xl }}>
           <View style={[styles.detailHeader, { borderBottomColor: theme.borderSubtle }]}>
             <View>
-              <Text style={[styles.detailTitle, { color: theme.textPrimary }]}>
-                {activeAdapter.friendlyName}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={[styles.detailTitle, { color: theme.textPrimary }]}>
+                  {activeAdapter.friendlyName}
+                </Text>
+                {activeIsDefault && (
+                  <View style={[styles.defaultBadgeLarge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
+                    <Text style={[styles.defaultBadgeLargeText, { color: theme.accent }]}>★ DEFAULT ADAPTER</Text>
+                  </View>
+                )}
+              </View>
               <Text style={[styles.detailSubtitle, { color: theme.textSecondary }]}>
                 {activeAdapter.description}
               </Text>
             </View>
             <StatusBadge status={activeAdapter.status} size="md" />
+          </View>
+
+          {/* Default Adapter Quick Action Card */}
+          <View
+            style={[
+              styles.defaultStatusCard,
+              {
+                backgroundColor: activeIsDefault ? theme.surfaceActive : theme.surfaceCard,
+                borderColor: activeIsDefault ? theme.accent : theme.border,
+              },
+            ]}
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={[styles.defaultStatusTitle, { color: activeIsDefault ? theme.accent : theme.textPrimary }]}>
+                {activeIsDefault ? '★ System Default Network Adapter' : 'Set as Default Network Adapter'}
+              </Text>
+              <Text style={[styles.defaultStatusDesc, { color: theme.textSecondary }]}>
+                {activeIsDefault
+                  ? 'All unassigned applications, games, and background services route traffic through this adapter (metric 5).'
+                  : `Route all unassigned applications and background traffic through ${activeAdapter.friendlyName} instead of other interfaces.`}
+              </Text>
+            </View>
+
+            {activeIsDefault ? (
+              <TouchableOpacity
+                style={[styles.actionBtnSecondary, { borderColor: theme.border, backgroundColor: theme.surfaceHover }]}
+                onPress={() => setDefaultAdapter('', 'WINDOWS_DEFAULT')}
+              >
+                <Text style={{ color: theme.textSecondary, fontSize: 11, fontWeight: '600' }}>Revert to Auto</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.actionBtnPrimary, { backgroundColor: theme.accent }]}
+                onPress={() => setDefaultAdapter(activeAdapter.id, 'PREFER_ADAPTER')}
+                disabled={activeAdapter.status !== 'UP'}
+              >
+                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>★ Make Default</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Properties Grid */}
@@ -355,5 +420,60 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: radii.sm,
     marginLeft: spacing.md,
+  },
+  defaultTag: {
+    marginLeft: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: radii.xs,
+    borderWidth: 1,
+  },
+  defaultTagText: {
+    fontFamily: typography.fontFamilyMono,
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+  },
+  defaultBadgeLarge: {
+    marginLeft: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: radii.xs,
+    borderWidth: 1,
+  },
+  defaultBadgeLargeText: {
+    fontFamily: typography.fontFamilyMono,
+    fontSize: 10,
+    fontWeight: typography.weights.bold,
+  },
+  defaultStatusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  defaultStatusTitle: {
+    fontFamily: typography.fontFamily,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
+  },
+  defaultStatusDesc: {
+    fontFamily: typography.fontFamily,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  actionBtnPrimary: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+  },
+  actionBtnSecondary: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+    borderWidth: 1,
   },
 });

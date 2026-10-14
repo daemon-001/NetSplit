@@ -7,6 +7,7 @@ import { WifiIcon, EthernetIcon, ShieldIcon, AppsIcon, RulesIcon, RefreshIcon } 
 
 export const OverviewScreen: React.FC = () => {
   const themeMode = useNetSplitStore((state) => state.themeMode);
+  const settings = useNetSplitStore((state) => state.settings);
   const systemStatus = useNetSplitStore((state) => state.systemStatus);
   const adapters = useNetSplitStore((state) => state.adapters);
   const apps = useNetSplitStore((state) => state.apps);
@@ -21,6 +22,16 @@ export const OverviewScreen: React.FC = () => {
   const assignedApps = apps.filter((a) => a.assignedAdapterId);
   const activeRules = rules.filter((r) => r.status === 'ACTIVE');
   const errorRules = rules.filter((r) => r.status === 'ERROR');
+
+  const preferredDefaultAdapter = settings.defaultAdapterId
+    ? adapters.find((a) => a.id === settings.defaultAdapterId)
+    : null;
+  const osDefaultAdapter = adapters.find((a) => a.isDefaultRoute);
+  const currentDefaultName = preferredDefaultAdapter
+    ? preferredDefaultAdapter.friendlyName
+    : osDefaultAdapter
+    ? `${osDefaultAdapter.friendlyName} (Auto)`
+    : 'Windows Auto';
 
   const formatLinkSpeed = (bps: number) => {
     if (!bps || bps === 0) return 'Unknown speed';
@@ -96,15 +107,17 @@ export const OverviewScreen: React.FC = () => {
         </View>
 
         <View style={[styles.metricCard, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
-          <Text style={[styles.cardLabel, { color: theme.textTertiary }]}>DEFAULT POLICY</Text>
+          <Text style={[styles.cardLabel, { color: theme.textTertiary }]}>DEFAULT ADAPTER</Text>
           <View style={styles.metricValRow}>
-            <Text style={[styles.metricVal, { color: theme.textPrimary, fontSize: 16 }]}>
-              {systemStatus?.defaultPolicy === 'PREFER_ADAPTER' ? 'Preferred Adapter' : 'Windows Default'}
+            <Text style={[styles.metricVal, { color: theme.textPrimary, fontSize: 15 }]} numberOfLines={1}>
+              {currentDefaultName}
             </Text>
           </View>
-          <Text style={[styles.cardFootnote, { color: theme.textTertiary }]}>
-            Unassigned apps follow default metric
-          </Text>
+          <TouchableOpacity onPress={() => setCurrentScreen('settings')}>
+            <Text style={[styles.cardLink, { color: theme.accent }]}>
+              {preferredDefaultAdapter ? `Unassigned apps → ${preferredDefaultAdapter.friendlyName}` : 'Configure default adapter →'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -120,6 +133,9 @@ export const OverviewScreen: React.FC = () => {
         {upAdapters.map((adapter) => {
           const isWifi = adapter.type === 'WIFI';
           const boundApps = apps.filter((a) => a.assignedAdapterId === adapter.id);
+          const isDefault =
+            (settings.defaultRoutingPolicy === 'PREFER_ADAPTER' && settings.defaultAdapterId === adapter.id) ||
+            (settings.defaultRoutingPolicy === 'WINDOWS_DEFAULT' && adapter.isDefaultRoute);
 
           return (
             <View
@@ -128,7 +144,7 @@ export const OverviewScreen: React.FC = () => {
                 styles.adapterCard,
                 {
                   backgroundColor: theme.surfaceCard,
-                  borderColor: adapter.isDefaultRoute ? theme.accent : theme.border,
+                  borderColor: isDefault ? theme.accent : theme.border,
                 },
               ]}
             >
@@ -182,9 +198,11 @@ export const OverviewScreen: React.FC = () => {
                 <Text style={[styles.assignedCountText, { color: theme.textSecondary }]}>
                   {boundApps.length} Application{boundApps.length === 1 ? '' : 's'} Assigned
                 </Text>
-                {adapter.isDefaultRoute && (
-                  <View style={[styles.defaultRoutePill, { backgroundColor: theme.surfaceSubtle }]}>
-                    <Text style={[styles.defaultRouteText, { color: theme.accent }]}>Default Gateway</Text>
+                {isDefault && (
+                  <View style={[styles.defaultRoutePill, { backgroundColor: theme.accent + '22', borderWidth: 1, borderColor: theme.accent }]}>
+                    <Text style={[styles.defaultRouteText, { color: theme.accent, fontWeight: 'bold' }]}>
+                      {settings.defaultRoutingPolicy === 'PREFER_ADAPTER' ? '★ Default Adapter' : 'Default Gateway'}
+                    </Text>
                   </View>
                 )}
               </View>

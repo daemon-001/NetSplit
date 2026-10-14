@@ -318,6 +318,8 @@ std::string IpcServer::ProcessJsonRpc(const std::string& requestBody) {
         return HandleGetConfig(id);
     } else if (method == "config.set") {
         return HandleSetConfig(id, requestBody);
+    } else if (method == "adapter.setDefault") {
+        return HandleSetDefaultAdapter(id, requestBody);
     } else if (method == "activity.list") {
         return HandleListActivity(id);
     }
@@ -675,21 +677,77 @@ std::string IpcServer::HandleGetConfig(const std::string& reqId) {
 std::string IpcServer::HandleSetConfig(const std::string& reqId, const std::string& body) {
     GlobalConfig cfg = m_pAssignMgr->GetGlobalConfig();
     std::string drp = ExtractJsonValue(body, "defaultRoutingPolicy");
-    if (!drp.empty()) cfg.defaultRoutingPolicy = drp;
     std::string daId = ExtractJsonValue(body, "defaultAdapterId");
-    if (!daId.empty()) cfg.defaultAdapterId = daId;
     std::string adb = ExtractJsonValue(body, "adapterDisconnectBehavior");
-    if (!adb.empty()) cfg.adapterDisconnectBehavior = adb;
     std::string tm = ExtractJsonValue(body, "themeMode");
+
+    bool policyChanged = (!drp.empty() && drp != cfg.defaultRoutingPolicy);
+    bool adapterChanged = (body.find("\"defaultAdapterId\"") != std::string::npos && daId != cfg.defaultAdapterId);
+
+    if (!drp.empty()) cfg.defaultRoutingPolicy = drp;
+    if (body.find("\"defaultAdapterId\"") != std::string::npos) cfg.defaultAdapterId = daId;
+    if (!adb.empty()) cfg.adapterDisconnectBehavior = adb;
     if (!tm.empty()) cfg.themeMode = tm;
 
     cfg.startWithWindows = ExtractJsonBool(body, "startWithWindows", cfg.startWithWindows);
     cfg.minimizeToTray = ExtractJsonBool(body, "minimizeToTray", cfg.minimizeToTray);
     cfg.enableAuditLogging = ExtractJsonBool(body, "enableAuditLogging", cfg.enableAuditLogging);
 
+    if (policyChanged || adapterChanged) {
+        std::string err;
+        if (cfg.defaultRoutingPolicy == "WINDOWS_DEFAULT" || cfg.defaultAdapterId.empty()) {
+            m_pAdapterMgr->SetDefaultAdapter("WINDOWS_AUTO", err);
+            LogActivity("INFO", "ADAPTER", "Default Adapter Reverted", "Reverted route metrics to Windows automatic");
+        } else {
+            m_pAdapterMgr->SetDefaultAdapter(cfg.defaultAdapterId, err);
+            auto pAd = m_pAdapterMgr->FindAdapterById(cfg.defaultAdapterId);
+            std::string adName = pAd ? WStringToString(pAd->friendlyName) : cfg.defaultAdapterId;
+            LogActivity("INFO", "ADAPTER", "Default Adapter Set", "Set " + adName + " as default network adapter (metric 5)");
+        }
+    }
+
     m_pAssignMgr->SetGlobalConfig(cfg);
     LogActivity("INFO", "SYSTEM", "Configuration Updated", "Global settings updated by user");
     return "{\"jsonrpc\":\"2.0\",\"id\":\"" + reqId + "\",\"result\":{\"success\":true}}";
+}
+
+std::string IpcServer::HandleSetDefaultAdapter(const std::string& reqId, const std::string& body) {
+    std::string adapterId = ExtractJsonValue(body, "adapterId");
+    std::string policy = ExtractJsonValue(body, "policy");
+
+    if (policy.empty()) {
+        policy = (adapterId.empty() || adapterId == "WINDOWS_AUTO") ? "WINDOWS_DEFAULT" : "PREFER_ADAPTER";
+    }
+
+    GlobalConfig cfg = m_pAssignMgr->GetGlobalConfig();
+    std::string err;
+    bool ok = false;
+
+    if (policy == "WINDOWS_DEFAULT" || adapterId.empty() || adapterId == "WINDOWS_AUTO") {
+        ok = m_pAdapterMgr->SetDefaultAdapter("WINDOWS_AUTO", err);
+        if (ok) {
+            cfg.defaultRoutingPolicy = "WINDOWS_DEFAULT";
+            cfg.defaultAdapterId = "";
+            m_pAssignMgr->SetGlobalConfig(cfg);
+            LogActivity("INFO", "ADAPTER", "Default Adapter Reset", "Reverted route metrics to Windows automatic");
+        }
+    } else {
+        ok = m_pAdapterMgr->SetDefaultAdapter(adapterId, err);
+        if (ok) {
+            cfg.defaultRoutingPolicy = "PREFER_ADAPTER";
+            cfg.defaultAdapterId = adapterId;
+            m_pAssignMgr->SetGlobalConfig(cfg);
+            auto pAd = m_pAdapterMgr->FindAdapterById(adapterId);
+            std::string name = pAd ? WStringToString(pAd->friendlyName) : adapterId;
+            LogActivity("INFO", "ADAPTER", "Default Adapter Set", "Set " + name + " as default network adapter (metric 5)");
+        }
+    }
+
+    if (!ok) {
+        return "{\"jsonrpc\":\"2.0\",\"id\":\"" + reqId + "\",\"error\":{\"code\":-32000,\"message\":\"" + JsonEscape(err) + "\"}}";
+    }
+
+    return "{\"jsonrpc\":\"2.0\",\"id\":\"" + reqId + "\",\"result\":{\"success\":true,\"defaultAdapterId\":\"" + JsonEscape(cfg.defaultAdapterId) + "\",\"defaultRoutingPolicy\":\"" + JsonEscape(cfg.defaultRoutingPolicy) + "\"}}";
 }
 
 std::string IpcServer::HandleListActivity(const std::string& reqId) {

@@ -120,6 +120,73 @@ describe('Service Daemon & Live IPC Integration Tests', () => {
     assert.strictEqual(remData.result.success, true);
   });
 
+  test('adapter.setDefault changes default routing and reverts to auto', async () => {
+    // 1. Get first active adapter
+    const listRes = await fetch('http://127.0.0.1:48192', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'def-1', method: 'adapter.list' }),
+    });
+    const listData = await listRes.json();
+    const activeAdapter = listData.result.find((a) => a.status === 'UP') || listData.result[0];
+    assert.ok(activeAdapter);
+
+    // 2. Set as default adapter
+    const setRes = await fetch('http://127.0.0.1:48192', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'def-2',
+        method: 'adapter.setDefault',
+        adapterId: activeAdapter.id,
+        policy: 'PREFER_ADAPTER',
+      }),
+    });
+    const setData = await setRes.json();
+    assert.strictEqual(setData.result?.success, true);
+    assert.strictEqual(setData.result?.defaultAdapterId, activeAdapter.id);
+    assert.strictEqual(setData.result?.defaultRoutingPolicy, 'PREFER_ADAPTER');
+
+    // 3. Verify in config.get
+    const cfgRes = await fetch('http://127.0.0.1:48192', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 'def-3', method: 'config.get' }),
+    });
+    const cfgData = await cfgRes.json();
+    assert.strictEqual(cfgData.result.defaultAdapterId, activeAdapter.id);
+    assert.strictEqual(cfgData.result.defaultRoutingPolicy, 'PREFER_ADAPTER');
+
+    // 4. Revert to WINDOWS_DEFAULT
+    const resetRes = await fetch('http://127.0.0.1:48192', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'def-4',
+        method: 'adapter.setDefault',
+        adapterId: '',
+        policy: 'WINDOWS_DEFAULT',
+      }),
+    });
+    const resetData = await resetRes.json();
+    assert.strictEqual(resetData.result.success, true);
+    assert.strictEqual(resetData.result.defaultRoutingPolicy, 'WINDOWS_DEFAULT');
+  });
+
   test('Service stops cleanly on termination signal', async () => {
     if (serviceProc && !serviceProc.killed) {
       serviceProc.kill();

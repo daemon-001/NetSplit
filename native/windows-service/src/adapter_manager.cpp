@@ -248,3 +248,77 @@ NetAdapterRecord* AdapterManager::FindAdapterByIndex(DWORD ifIndex) {
     }
     return nullptr;
 }
+
+bool AdapterManager::SetDefaultAdapter(const std::string& adapterId, std::string& outError) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    if (adapterId.empty() || adapterId == "WINDOWS_AUTO") {
+        // Reset all interfaces to AutomaticMetric = TRUE for both IPv4 and IPv6
+        for (const auto& a : m_adapters) {
+            MIB_IPINTERFACE_ROW row;
+            InitializeIpInterfaceEntry(&row);
+            row.Family = AF_INET;
+            row.InterfaceIndex = a.ifIndex;
+            if (GetIpInterfaceEntry(&row) == NO_ERROR) {
+                row.UseAutomaticMetric = TRUE;
+                SetIpInterfaceEntry(&row);
+            }
+
+            InitializeIpInterfaceEntry(&row);
+            row.Family = AF_INET6;
+            row.InterfaceIndex = a.ifIndex;
+            if (GetIpInterfaceEntry(&row) == NO_ERROR) {
+                row.UseAutomaticMetric = TRUE;
+                SetIpInterfaceEntry(&row);
+            }
+        }
+        return true;
+    }
+
+    NetAdapterRecord* pTarget = nullptr;
+    for (auto& a : m_adapters) {
+        if (a.id == adapterId) {
+            pTarget = &a;
+            break;
+        }
+    }
+
+    if (!pTarget) {
+        outError = "Adapter not found: " + adapterId;
+        return false;
+    }
+
+    DWORD targetIndex = pTarget->ifIndex;
+
+    // Set target interface to lowest metric (5), others to higher metric (35)
+    // Applies to both IPv4 and IPv6 so unassigned programs default through this adapter
+    for (const auto& a : m_adapters) {
+        // IPv4
+        MIB_IPINTERFACE_ROW row;
+        InitializeIpInterfaceEntry(&row);
+        row.Family = AF_INET;
+        row.InterfaceIndex = a.ifIndex;
+        if (GetIpInterfaceEntry(&row) == NO_ERROR) {
+            row.UseAutomaticMetric = FALSE;
+            row.Metric = (a.ifIndex == targetIndex) ? 5 : 35;
+            DWORD err = SetIpInterfaceEntry(&row);
+            if (a.ifIndex == targetIndex && err != NO_ERROR && err != ERROR_ACCESS_DENIED) {
+                outError = "SetIpInterfaceEntry IPv4 failed: " + std::to_string(err);
+                return false;
+            }
+        }
+
+        // IPv6
+        InitializeIpInterfaceEntry(&row);
+        row.Family = AF_INET6;
+        row.InterfaceIndex = a.ifIndex;
+        if (GetIpInterfaceEntry(&row) == NO_ERROR) {
+            row.UseAutomaticMetric = FALSE;
+            row.Metric = (a.ifIndex == targetIndex) ? 5 : 35;
+            SetIpInterfaceEntry(&row);
+        }
+    }
+
+    return true;
+}
+

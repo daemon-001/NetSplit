@@ -31,6 +31,7 @@ public:
     std::vector<NetAdapterRecord> GetAdapters();
     NetAdapterRecord* FindAdapterById(const std::string& adapterId);
     NetAdapterRecord* FindAdapterByIndex(DWORD ifIndex);
+    bool SetDefaultAdapter(const std::string& adapterId, std::string& outError);
 
 private:
     std::vector<NetAdapterRecord> m_adapters;

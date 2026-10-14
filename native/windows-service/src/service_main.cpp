@@ -76,6 +76,17 @@ void RunDaemon(bool isService) {
         }
     }
 
+    // Re-apply any persisted default adapter setting
+    GlobalConfig cfg = assignMgr.GetGlobalConfig();
+    if (cfg.defaultRoutingPolicy == "PREFER_ADAPTER" && !cfg.defaultAdapterId.empty()) {
+        std::string defErr;
+        if (adapterMgr.SetDefaultAdapter(cfg.defaultAdapterId, defErr)) {
+            printf("[NetSplit] Applied persisted default adapter: %s (metric 5)\n", cfg.defaultAdapterId.c_str());
+        } else {
+            printf("[NetSplit] Notice: default adapter %s not applied: %s\n", cfg.defaultAdapterId.c_str(), defErr.c_str());
+        }
+    }
+
     IpcServer ipcServer(48192, tokenPath, &adapterMgr, &appMgr, &assignMgr, &routingEngine);
     ipcServer.Start();
 
@@ -90,6 +101,10 @@ void RunDaemon(bool isService) {
 
     printf("[NetSplit] Releasing WFP routing engine filters...\n");
     routingEngine.Shutdown();
+
+    printf("[NetSplit] Restoring Windows default adapter route metrics...\n");
+    std::string resetErr;
+    adapterMgr.SetDefaultAdapter("WINDOWS_AUTO", resetErr);
 
     printf("[NetSplit] Saving assignment configuration...\n");
     assignMgr.Save();
