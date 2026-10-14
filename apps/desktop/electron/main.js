@@ -35,27 +35,75 @@ function getToken() {
   return null;
 }
 
-function ensureServiceRunning() {
+function checkServiceHealth() {
+  const http = require('http');
+  return new Promise((resolve) => {
+    const req = http.request(
+      {
+        host: '127.0.0.1',
+        port: 48192,
+        method: 'OPTIONS',
+        timeout: 500,
+      },
+      () => resolve(true)
+    );
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.end();
+  });
+}
+
+function checkProcessRunning(exeName) {
+  return new Promise((resolve) => {
+    const { exec } = require('child_process');
+    exec(`tasklist /FI "IMAGENAME eq ${exeName}" /NH`, (err, stdout) => {
+      if (!err && stdout && stdout.toLowerCase().includes(exeName.toLowerCase())) {
+        resolve(true);
+      } else {
+        resolve(false);
+      }
+    });
+  });
+}
+
+async function ensureServiceRunning() {
+  // If the service is already running and responding, NEVER prompt for UAC!
+  const isHealthy = await checkServiceHealth();
+  if (isHealthy) {
+    console.log('[Electron] NetSplitService is already running and healthy. Skipping elevation prompt.');
+    return;
+  }
+
+  // If the process is running but still initializing, give it a moment
+  const isProcActive = await checkProcessRunning('NetSplitService.exe');
+  if (isProcActive) {
+    console.log('[Electron] NetSplitService process is already running. Waiting for startup.');
+    return;
+  }
+
   const serviceExe = getServicePath();
-  if (fs.existsSync(serviceExe)) {
-    console.log('[Electron] Ensuring NetSplitService is running in background:', serviceExe);
-    try {
-      const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
-      const { exec } = require('child_process');
-      exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`, (err) => {
-        if (err) {
-          console.warn('[Electron] Could not launch elevated service, falling back to standard spawn:', err.message);
-          serviceProcess = spawn(serviceExe, ['--background'], {
-            detached: true,
-            windowsHide: true,
-            stdio: 'ignore',
-          });
-          serviceProcess.unref();
-        }
-      });
-    } catch (err) {
-      console.warn('[Electron] Could not launch background service:', err.message);
-    }
+  if (!fs.existsSync(serviceExe)) return;
+
+  console.log('[Electron] NetSplitService not running, launching elevated...');
+  try {
+    const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
+    const { exec } = require('child_process');
+    exec(`powershell -NoProfile -Command "${psCmd}"`, (err) => {
+      if (err) {
+        console.warn('[Electron] Could not launch elevated service, falling back to standard spawn:', err.message);
+        serviceProcess = spawn(serviceExe, ['--background'], {
+          detached: true,
+          windowsHide: true,
+          stdio: 'ignore',
+        });
+        serviceProcess.unref();
+      }
+    });
+  } catch (err) {
+    console.warn('[Electron] Could not launch background service:', err.message);
   }
 }
 
