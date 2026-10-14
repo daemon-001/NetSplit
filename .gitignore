@@ -1,0 +1,38 @@
+# NetSplit .gitignore
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# C++ Build Artifacts
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.idb
+native/windows-service/*.exe
+native/poc-verifier/*.exe
+
+# TypeScript Compilation Outputs
+packages/*/dist/
+apps/*/dist/
+
+# Logs and Runtime Files
+*.log
+service.log
+service_err.log
+ipc_auth.token
+assignments.json
+
+# Local scratch / test files
+test_run.ps1
+test_simple.ps1
+test_wifi_assign.ps1
+scratch/
+
+# IDE / Editor configs
+.vscode/
+.vs/
+*.user
+*.suo

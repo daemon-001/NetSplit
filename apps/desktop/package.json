@@ -1,0 +1,23 @@
+{
+  "name": "@netsplit/desktop",
+  "version": "1.0.0",
+  "description": "NetSplit - Premium Windows 11 Desktop Application for Per-Application Network Routing",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "react-native start",
+    "windows": "react-native run-windows",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@netsplit/shared-types": "^1.0.0",
+    "react": "18.3.1",
+    "react-native": "0.74.5",
+    "react-native-windows": "0.74.24",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "typescript": "^5.4.0"
+  }
+}
