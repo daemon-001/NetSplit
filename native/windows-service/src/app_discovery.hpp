@@ -12,6 +12,7 @@ struct DiscoveredApp {
     std::vector<DWORD> processIds;
     bool isRunning = false;
     bool isSystemProcess = false;
+    bool hasVisibleWindow = false;
     bool isManual = false;
 };
 

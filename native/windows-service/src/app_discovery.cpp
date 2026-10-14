@@ -5,6 +5,7 @@
 #include <cwctype>
 #include <sstream>
 #include <iomanip>
+#include <set>
 #include <shlwapi.h>
 
 #pragma comment(lib, "shlwapi.lib")
@@ -120,14 +121,57 @@ void AppDiscoveryManager::ExtractMetadata(DiscoveredApp& app) {
     }
 }
 
+static BOOL CALLBACK CollectVisibleWindowPids(HWND hwnd, LPARAM lParam) {
+    if (!IsWindowVisible(hwnd)) return TRUE;
+    if (GetWindowTextLengthW(hwnd) == 0) return TRUE;
+    LONG exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_TOOLWINDOW) return TRUE;
+    if (GetWindow(hwnd, GW_OWNER) != NULL) return TRUE;
+
+    RECT rc;
+    if (GetWindowRect(hwnd, &rc)) {
+        if ((rc.right - rc.left) <= 0 || (rc.bottom - rc.top) <= 0) return TRUE;
+    }
+
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid != 0) {
+        auto* pids = reinterpret_cast<std::set<DWORD>*>(lParam);
+        pids->insert(pid);
+    }
+    return TRUE;
+}
+
 void AppDiscoveryManager::ScanRunningProcesses() {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     // Reset running status across all tracked apps
     for (auto& pair : m_apps) {
         pair.second.isRunning = false;
+        pair.second.hasVisibleWindow = false;
         pair.second.processIds.clear();
     }
+
+    HWINSTA hOrigStation = GetProcessWindowStation();
+    HDESK hOrigDesk = GetThreadDesktop(GetCurrentThreadId());
+
+    HWINSTA hWinSta = OpenWindowStationW(L"WinSta0", FALSE, MAXIMUM_ALLOWED);
+    HDESK hDesk = NULL;
+    if (hWinSta) {
+        SetProcessWindowStation(hWinSta);
+        hDesk = OpenDesktopW(L"Default", 0, FALSE, MAXIMUM_ALLOWED);
+        if (hDesk) {
+            SetThreadDesktop(hDesk);
+        }
+    }
+
+    std::set<DWORD> windowPids;
+    EnumWindows(CollectVisibleWindowPids, (LPARAM)&windowPids);
+
+    if (hOrigDesk) SetThreadDesktop(hOrigDesk);
+    if (hOrigStation) SetProcessWindowStation(hOrigStation);
+    if (hDesk) CloseDesktop(hDesk);
+    if (hWinSta) CloseWindowStation(hWinSta);
 
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE) return;
@@ -152,6 +196,9 @@ void AppDiscoveryManager::ScanRunningProcesses() {
                 if (it != m_apps.end()) {
                     it->second.isRunning = true;
                     it->second.processIds.push_back(pe.th32ProcessID);
+                    if (windowPids.find(pe.th32ProcessID) != windowPids.end()) {
+                        it->second.hasVisibleWindow = true;
+                    }
                 } else {
                     DiscoveredApp newApp;
                     newApp.id = appId;
@@ -159,6 +206,9 @@ void AppDiscoveryManager::ScanRunningProcesses() {
                     newApp.normalizedPath = norm;
                     newApp.isRunning = true;
                     newApp.processIds.push_back(pe.th32ProcessID);
+                    if (windowPids.find(pe.th32ProcessID) != windowPids.end()) {
+                        newApp.hasVisibleWindow = true;
+                    }
 
                     // Check if system directory
                     if (norm.find(L"\\windows\\system32\\") != std::wstring::npos ||

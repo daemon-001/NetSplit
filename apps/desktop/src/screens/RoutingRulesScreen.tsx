@@ -11,7 +11,7 @@ export const RoutingRulesScreen: React.FC = () => {
   const toggleRule = useNetSplitStore((state) => state.toggleRule);
   const removeAssignment = useNetSplitStore((state) => state.removeAssignment);
   const verifyRules = useNetSplitStore((state) => state.verifyRules);
-  const isLoading = useNetSplitStore((state) => state.isLoading);
+  const isVerifyingRules = useNetSplitStore((state) => state.isVerifyingRules);
   const setCurrentScreen = useNetSplitStore((state) => state.setCurrentScreen);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
@@ -32,10 +32,10 @@ export const RoutingRulesScreen: React.FC = () => {
         <TouchableOpacity
           style={[styles.verifyBtn, { backgroundColor: theme.accent }]}
           onPress={() => verifyRules()}
-          disabled={isLoading}
+          disabled={isVerifyingRules}
         >
           <Text style={[styles.verifyBtnText, { color: '#ffffff' }]}>
-            {isLoading ? 'Verifying...' : '⚡ Verify All Rules'}
+            {isVerifyingRules ? 'Verifying...' : '⚡ Verify All Rules'}
           </Text>
         </TouchableOpacity>
       </View>

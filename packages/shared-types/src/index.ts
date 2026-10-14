@@ -55,6 +55,7 @@ export interface ApplicationInfo {
   processStatus: ProcessStatus;
   isRunning: boolean;
   isSystemProcess: boolean;
+  hasVisibleWindow?: boolean;
   isGroup: boolean;
   groupMemberPaths?: string[];
   assignedAdapterId?: string;

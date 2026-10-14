@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -83,24 +83,27 @@ function checkProcessRunning(exeName) {
 }
 
 async function ensureServiceRunning() {
-  // If the service is already running and responding, NEVER prompt for UAC!
-  const isHealthy = await checkServiceHealth();
-  if (isHealthy) {
-    console.log('[Electron] NetSplitService is already running and healthy. Skipping elevation prompt.');
+  if (await checkServiceHealth()) {
+    console.log('[Electron] NetSplitService is healthy and responding on port 48192.');
     return;
   }
 
-  // If the process is running but still initializing, give it a moment
-  const isProcActive = await checkProcessRunning('NetSplitService.exe');
-  if (isProcActive) {
-    console.log('[Electron] NetSplitService process is already running. Waiting for startup.');
-    return;
+  // If process is running but not responding, wait briefly for initialization
+  if (await checkProcessRunning('NetSplitService.exe')) {
+    console.log('[Electron] NetSplitService process detected. Waiting for port 48192...');
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 400));
+      if (await checkServiceHealth()) {
+        console.log('[Electron] NetSplitService is now healthy.');
+        return;
+      }
+    }
   }
 
   const serviceExe = getServicePath();
   if (!fs.existsSync(serviceExe)) return;
 
-  console.log('[Electron] NetSplitService not running, launching elevated...');
+  console.log('[Electron] NetSplitService not responding. Launching background service...');
   try {
     const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
     const { exec } = require('child_process');
@@ -115,15 +118,25 @@ async function ensureServiceRunning() {
         serviceProcess.unref();
       }
     });
+
+    // Wait for the service to bind port 48192
+    for (let i = 0; i < 16; i++) {
+      await new Promise((r) => setTimeout(r, 400));
+      if (await checkServiceHealth()) {
+        console.log('[Electron] NetSplitService is now active on port 48192.');
+        break;
+      }
+    }
   } catch (err) {
     console.warn('[Electron] Could not launch background service:', err.message);
   }
 }
 
-function createWindow() {
-  ensureServiceRunning();
+async function createWindow() {
+  await ensureServiceRunning();
 
   mainWindow = new BrowserWindow({
+
     width: 1240,
     height: 820,
     minWidth: 980,
@@ -227,10 +240,63 @@ ipcMain.handle('elevate-service', async () => {
 ipcMain.handle('install-service', async () => {
   const scriptPath = path.resolve(__dirname, '../../../scripts/install-service.ps1');
   const { exec } = require('child_process');
-  const psCmd = `Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"${scriptPath}\"' -Verb RunAs`;
-  exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`);
-  return true;
+  
+  console.log('[Electron] Requesting service installation via helper script...');
+  const psCmd = `Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"${scriptPath}\"' -Verb RunAs -Wait`;
+  await new Promise((resolve) => {
+    exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`, () => resolve());
+  });
+
+  // Poll for service health and fresh token
+  let freshToken = null;
+  for (let i = 0; i < 24; i++) {
+    await new Promise((r) => setTimeout(r, 500));
+    const healthy = await checkServiceHealth();
+    if (healthy) {
+      freshToken = getToken();
+      if (freshToken) break;
+    }
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('service-restarted', { token: freshToken });
+  }
+
+  return { success: !!freshToken, token: freshToken };
 });
+
+ipcMain.handle('uninstall-service', async () => {
+  const scriptPath = path.resolve(__dirname, '../../../scripts/uninstall-service.ps1');
+  const { exec } = require('child_process');
+  
+  console.log('[Electron] Requesting clean service uninstallation via helper script...');
+  const psCmd = `Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"${scriptPath}\"' -Verb RunAs -Wait`;
+  await new Promise((resolve) => {
+    exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`, () => resolve());
+  });
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('service-uninstalled');
+  }
+
+  return { success: true };
+});
+
+ipcMain.handle('get-visible-windows', async () => {
+  try {
+    if (desktopCapturer && typeof desktopCapturer.getSources === 'function') {
+      const sources = await desktopCapturer.getSources({ types: ['window'], fetchWindowIcons: false });
+      return sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+      }));
+    }
+  } catch (err) {
+    console.warn('[Electron] Could not enumerate desktop window sources:', err ? err.message : err);
+  }
+  return [];
+});
+
 
 app.whenReady().then(createWindow);
 

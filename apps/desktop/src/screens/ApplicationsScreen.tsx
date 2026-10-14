@@ -1,30 +1,118 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
 import { useNetSplitStore, AppFilterType } from '../store/useNetSplitStore';
+import { ApplicationInfo } from '@netsplit/shared-types';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { StatusBadge } from '../components/StatusBadge';
 import { QuickAdapterSelector } from '../components/QuickAdapterSelector';
 import { NativePickerModal } from '../components/NativePickerModal';
 import { BulkActionBar } from '../components/BulkActionBar';
-import { SearchIcon } from '../components/Icons';
+
+type SortColumn = 'app' | 'process' | 'adapter' | 'rule';
+type SortOrder = 'asc' | 'desc';
 
 export const ApplicationsScreen: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
+  const [sortColumn, setSortColumn] = useState<SortColumn>('app');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
   const themeMode = useNetSplitStore((state) => state.themeMode);
   const apps = useNetSplitStore((state) => state.apps);
   const searchQuery = useNetSplitStore((state) => state.searchQuery);
-  const setSearchQuery = useNetSplitStore((state) => state.setSearchQuery);
   const appFilter = useNetSplitStore((state) => state.appFilter);
   const setAppFilter = useNetSplitStore((state) => state.setAppFilter);
   const selectedAppIds = useNetSplitStore((state) => state.selectedAppIds);
   const toggleAppSelection = useNetSplitStore((state) => state.toggleAppSelection);
   const selectAllApps = useNetSplitStore((state) => state.selectAllApps);
   const clearSelection = useNetSplitStore((state) => state.clearSelection);
+  const visibleWindowTitles = useNetSplitStore((state) => state.visibleWindowTitles);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
-  // Filter apps
+  // Detect whether an application is an active GUI app open in the foreground (like Task Manager "Apps")
+  const isForegroundApp = (app: ApplicationInfo) => {
+    if (!app.isRunning) return false;
+
+    // 1. Native Win32 EnumWindows + WinSta0 detection (exact match to Task Manager)
+    if (app.hasVisibleWindow === true) return true;
+
+    const path = (app.executablePath || '').toLowerCase();
+    const name = (app.name || '').toLowerCase();
+    const filename = path.split('\\').pop() || '';
+
+    // 2. Windows system & driver store directories are always background processes
+    const isSystemPath =
+      path.includes('\\windows\\system32\\') ||
+      path.includes('\\windows\\syswow64\\') ||
+      path.includes('\\driverstore\\') ||
+      path.includes('\\system volume information\\') ||
+      path.includes('\\progra~1\\difx\\') ||
+      path.includes('\\windows\\servicing\\') ||
+      path.includes('\\windows\\winsxs\\');
+
+    if (app.isSystemProcess || isSystemPath) return false;
+
+    // 3. Known background services, daemons, installers & helpers
+    const bgNames = [
+      'services.exe', 'svchost.exe', 'lsass.exe', 'csrss.exe', 'wininit.exe',
+      'winlogon.exe', 'smss.exe', 'dpinst.exe', 'dpinst_x64.exe', 'armourycrate.service.exe',
+      'asusappservice.exe', 'asussystemanalysis.exe', 'asusoptimization.exe',
+      'taskhostw.exe', 'sihost.exe', 'ctfmon.exe', 'conhost.exe',
+      'runtimebroker.exe', 'searchindexer.exe', 'searchhost.exe', 'shellexperiencehost.exe',
+      'startmenuexperiencehost.exe', 'fontdrvhost.exe', 'dwm.exe', 'spoolsv.exe',
+      'audiodg.exe', 'wlanext.exe', 'dashost.exe', 'smartscreen.exe',
+    ];
+    if (bgNames.includes(filename.toLowerCase())) return false;
+
+    if (
+      name.toLowerCase().endsWith('service') ||
+      name.toLowerCase().includes('service daemon') ||
+      name.toLowerCase().includes('driver package')
+    ) {
+      return false;
+    }
+
+    // 4. Microsoft Edge WebView2 runtime processes are embedded headless worker processes
+    if (name.toLowerCase().includes('webview2') || path.includes('edgewebview')) {
+      return false;
+    }
+
+    // 5. Match against active window titles from host desktopCapturer
+    if (visibleWindowTitles && visibleWindowTitles.length > 0) {
+      const match = visibleWindowTitles.some((title) => {
+        const t = title.toLowerCase();
+        return t.includes(name) || name.includes(t) || (t.length > 3 && path.includes(t));
+      });
+      if (match) return true;
+    }
+
+    // 6. Interactive user applications in Program Files, User Profile, Games, Steam, etc.
+    const isUserApp =
+      path.includes('\\games\\') ||
+      path.includes('\\steam\\') ||
+      path.includes('\\discord\\') ||
+      path.includes('\\chrome\\') ||
+      path.includes('\\firefox\\') ||
+      path.includes('\\brave\\') ||
+      path.includes('\\spotify\\') ||
+      path.includes('\\slack\\') ||
+      path.includes('\\telegram\\') ||
+      path.includes('\\obs\\') ||
+      path.includes('\\vlc\\') ||
+      (app as any).isManual === true;
+
+    if (isUserApp) return true;
+
+    return false;
+  };
+
+  // Detect whether an application is a background process (like Task Manager "Background processes")
+  const isBackgroundProcess = (app: ApplicationInfo) => {
+    if (!app.isRunning) return false;
+    return !isForegroundApp(app);
+  };
+
+  // Filter apps by search query and category tab
   const filteredApps = apps.filter((app) => {
     // Search query
     if (searchQuery.trim().length > 0) {
@@ -34,26 +122,87 @@ export const ApplicationsScreen: React.FC = () => {
       if (!matchName && !matchPath) return false;
     }
 
-    // Filter status
+    // Filter status tab
     if (appFilter === 'running') return app.isRunning;
+    if (appFilter === 'foreground' || appFilter === 'windows') return isForegroundApp(app);
+    if (appFilter === 'background') return isBackgroundProcess(app);
     if (appFilter === 'assigned') return !!app.assignedAdapterId;
     if (appFilter === 'unassigned') return !app.assignedAdapterId;
     return true;
   });
 
+  // Sort apps according to selected column and direction
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(column);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedApps = [...filteredApps].sort((a, b) => {
+    let comparison = 0;
+    if (sortColumn === 'app') {
+      comparison = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      if (comparison === 0) {
+        comparison = a.executablePath.localeCompare(b.executablePath);
+      }
+    } else if (sortColumn === 'process') {
+      // Asc: running (most instances) first -> stopped. Desc: stopped first -> running
+      const aInstances = a.isRunning ? (a.processIds?.length || 1) : 0;
+      const bInstances = b.isRunning ? (b.processIds?.length || 1) : 0;
+      comparison = bInstances - aInstances;
+      if (comparison === 0) {
+        comparison = a.name.localeCompare(b.name);
+      }
+    } else if (sortColumn === 'adapter') {
+      // Asc: assigned adapter first (A-Z by adapter name), then unassigned. Desc: unassigned first
+      const aAssigned = a.assignedAdapterName ? 1 : 0;
+      const bAssigned = b.assignedAdapterName ? 1 : 0;
+      if (aAssigned !== bAssigned) {
+        comparison = bAssigned - aAssigned;
+      } else if (a.assignedAdapterName && b.assignedAdapterName) {
+        comparison = a.assignedAdapterName.localeCompare(b.assignedAdapterName);
+      } else {
+        comparison = a.name.localeCompare(b.name);
+      }
+    } else if (sortColumn === 'rule') {
+      // Asc: ACTIVE > UNVERIFIED > PENDING > ERROR > INACTIVE > NONE
+      const rank: Record<string, number> = {
+        ACTIVE: 5,
+        UNVERIFIED: 4,
+        PENDING: 3,
+        ERROR: 2,
+        INACTIVE: 1,
+        NONE: 0,
+      };
+      const rankA = rank[a.ruleStatus] ?? -1;
+      const rankB = rank[b.ruleStatus] ?? -1;
+      comparison = rankB - rankA;
+      if (comparison === 0) {
+        comparison = a.name.localeCompare(b.name);
+      }
+    }
+
+    return sortOrder === 'asc' ? comparison : -comparison;
+  });
+
   const allFilteredSelected =
-    filteredApps.length > 0 && filteredApps.every((a) => selectedAppIds.includes(a.id));
+    sortedApps.length > 0 && sortedApps.every((a) => selectedAppIds.includes(a.id));
 
   const handleToggleSelectAll = () => {
     if (allFilteredSelected) {
       clearSelection();
     } else {
-      selectAllApps(filteredApps.map((a) => a.id));
+      selectAllApps(sortedApps.map((a) => a.id));
     }
   };
 
   const filterTabs: Array<{ key: AppFilterType; label: string }> = [
     { key: 'all', label: `All (${apps.length})` },
+    { key: 'foreground', label: `Foreground Apps (${apps.filter(isForegroundApp).length})` },
+    { key: 'background', label: `Background (${apps.filter(isBackgroundProcess).length})` },
     { key: 'running', label: `Running (${apps.filter((a) => a.isRunning).length})` },
     { key: 'assigned', label: `Assigned (${apps.filter((a) => a.assignedAdapterId).length})` },
     { key: 'unassigned', label: `Unassigned (${apps.filter((a) => !a.assignedAdapterId).length})` },
@@ -102,7 +251,7 @@ export const ApplicationsScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Table Header */}
+      {/* Table Header with Clickable Arrow Sort Buttons */}
       <View style={[styles.tableHeader, { backgroundColor: theme.tableHeaderBg, borderBottomColor: theme.border }]}>
         <TouchableOpacity style={styles.colCheck} onPress={handleToggleSelectAll}>
           <View
@@ -118,26 +267,118 @@ export const ApplicationsScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
 
-        <View style={styles.colApp}>
-          <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>APPLICATION</Text>
-        </View>
+        {/* APPLICATION Column Header */}
+        <TouchableOpacity
+          style={[styles.colApp, styles.headerSortBtn]}
+          onPress={() => handleSort('app')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.colHeaderText,
+              { color: sortColumn === 'app' ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            APPLICATION
+          </Text>
+          <Text
+            style={[
+              styles.sortArrow,
+              {
+                color: sortColumn === 'app' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'app' ? 1 : 0.4,
+              },
+            ]}
+          >
+            {sortColumn === 'app' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+          </Text>
+        </TouchableOpacity>
 
-        <View style={styles.colProcess}>
-          <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>PROCESS STATUS</Text>
-        </View>
+        {/* PROCESS STATUS Column Header */}
+        <TouchableOpacity
+          style={[styles.colProcess, styles.headerSortBtn]}
+          onPress={() => handleSort('process')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.colHeaderText,
+              { color: sortColumn === 'process' ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            PROCESS STATUS
+          </Text>
+          <Text
+            style={[
+              styles.sortArrow,
+              {
+                color: sortColumn === 'process' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'process' ? 1 : 0.4,
+              },
+            ]}
+          >
+            {sortColumn === 'process' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+          </Text>
+        </TouchableOpacity>
 
-        <View style={styles.colAdapter}>
-          <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>ASSIGNED ADAPTER</Text>
-        </View>
+        {/* ASSIGNED ADAPTER Column Header */}
+        <TouchableOpacity
+          style={[styles.colAdapter, styles.headerSortBtn]}
+          onPress={() => handleSort('adapter')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.colHeaderText,
+              { color: sortColumn === 'adapter' ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            ASSIGNED ADAPTER
+          </Text>
+          <Text
+            style={[
+              styles.sortArrow,
+              {
+                color: sortColumn === 'adapter' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'adapter' ? 1 : 0.4,
+              },
+            ]}
+          >
+            {sortColumn === 'adapter' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+          </Text>
+        </TouchableOpacity>
 
-        <View style={styles.colRuleStatus}>
-          <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>RULE STATUS</Text>
-        </View>
+        {/* RULE STATUS Column Header */}
+        <TouchableOpacity
+          style={[styles.colRuleStatus, styles.headerSortBtn]}
+          onPress={() => handleSort('rule')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.colHeaderText,
+              { color: sortColumn === 'rule' ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            RULE STATUS
+          </Text>
+          <Text
+            style={[
+              styles.sortArrow,
+              {
+                color: sortColumn === 'rule' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'rule' ? 1 : 0.4,
+              },
+            ]}
+          >
+            {sortColumn === 'rule' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Applications Virtualized List */}
       <FlatList
-        data={filteredApps}
+        data={sortedApps}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
           const isSelected = selectedAppIds.includes(item.id);
@@ -280,6 +521,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: typography.weights.bold,
     letterSpacing: 0.5,
+  },
+  headerSortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    cursor: 'pointer' as unknown as undefined,
+    userSelect: 'none' as unknown as undefined,
+  },
+  sortArrow: {
+    fontFamily: typography.fontFamilyMono,
+    fontSize: 10,
+    marginLeft: 4,
+    fontWeight: typography.weights.bold,
   },
   tableRow: {
     flexDirection: 'row',

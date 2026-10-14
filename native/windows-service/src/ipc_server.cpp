@@ -272,9 +272,6 @@ bool IpcServer::Start() {
     m_listenSock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (m_listenSock == INVALID_SOCKET) return false;
 
-    int opt = 1;
-    setsockopt(m_listenSock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
-
     sockaddr_in addr = {0};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
@@ -578,6 +575,7 @@ std::string IpcServer::HandleListApp(const std::string& reqId) {
         ss << "\"version\":\"" << JsonEscape(WStringToString(app.version)) << "\",";
         ss << "\"isRunning\":" << (app.isRunning ? "true" : "false") << ",";
         ss << "\"isSystemProcess\":" << (app.isSystemProcess ? "true" : "false") << ",";
+        ss << "\"hasVisibleWindow\":" << (app.hasVisibleWindow ? "true" : "false") << ",";
         ss << "\"processIds\":[";
         for (size_t pidIdx = 0; pidIdx < app.processIds.size(); ++pidIdx) {
             ss << app.processIds[pidIdx] << (pidIdx + 1 < app.processIds.size() ? "," : "");

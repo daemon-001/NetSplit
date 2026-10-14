@@ -14,7 +14,7 @@ export const OverviewScreen: React.FC = () => {
   const rules = useNetSplitStore((state) => state.rules);
   const setCurrentScreen = useNetSplitStore((state) => state.setCurrentScreen);
   const verifyRules = useNetSplitStore((state) => state.verifyRules);
-  const isLoading = useNetSplitStore((state) => state.isLoading);
+  const isVerifyingRules = useNetSplitStore((state) => state.isVerifyingRules);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -60,10 +60,10 @@ export const OverviewScreen: React.FC = () => {
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: theme.accent }]}
             onPress={() => verifyRules()}
-            disabled={isLoading}
+            disabled={isVerifyingRules}
           >
             <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
-              {isLoading ? 'Verifying...' : 'Verify System Rules'}
+              {isVerifyingRules ? 'Verifying...' : 'Verify System Rules'}
             </Text>
           </TouchableOpacity>
         </View>

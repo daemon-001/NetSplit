@@ -12,13 +12,14 @@ import {
 import { defaultIpcClient } from '../services/ipcClient';
 
 export type ScreenType = 'overview' | 'apps' | 'adapters' | 'rules' | 'activity' | 'settings';
-export type AppFilterType = 'all' | 'running' | 'assigned' | 'unassigned';
+export type AppFilterType = 'all' | 'running' | 'foreground' | 'background' | 'assigned' | 'unassigned' | 'windows';
 
 interface NetSplitState {
   currentScreen: ScreenType;
   themeMode: 'dark' | 'light';
   serviceConnected: boolean;
   isLoading: boolean;
+  isVerifyingRules: boolean;
   lastError: string | null;
 
   systemStatus: SystemStatus | null;
@@ -32,8 +33,10 @@ interface NetSplitState {
   searchQuery: string;
   appFilter: AppFilterType;
   selectedAppIds: string[];
+  visibleWindowTitles: string[];
 
   // Actions
+  fetchVisibleWindows: () => Promise<void>;
   setCurrentScreen: (screen: ScreenType) => void;
   setThemeMode: (mode: 'dark' | 'light') => void;
   toggleTheme: () => void;
@@ -45,7 +48,7 @@ interface NetSplitState {
 
   // Async Backend Actions
   init: () => Promise<void>;
-  refreshAll: () => Promise<void>;
+  refreshAll: (showLoading?: boolean) => Promise<void>;
   assignApp: (appId: string, adapterId: string, fallbackMode?: FallbackPolicy) => Promise<void>;
   bulkAssign: (adapterId: string) => Promise<{ succeeded: number; failed: number }>;
   bulkUnassign: () => Promise<void>;
@@ -62,6 +65,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   themeMode: 'dark',
   serviceConnected: false,
   isLoading: false,
+  isVerifyingRules: false,
   lastError: null,
 
   systemStatus: null,
@@ -81,6 +85,23 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   searchQuery: '',
   appFilter: 'all',
   selectedAppIds: [],
+  visibleWindowTitles: [],
+
+  fetchVisibleWindows: async () => {
+    try {
+      if (typeof window !== 'undefined' && (window as any).netSplitHost?.getVisibleWindows) {
+        const windows = await (window as any).netSplitHost.getVisibleWindows();
+        if (Array.isArray(windows)) {
+          const titles = windows
+            .map((w: { name?: string }) => (w.name || '').trim())
+            .filter((t: string) => t.length > 0);
+          set({ visibleWindowTitles: titles });
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch visible windows:', e);
+    }
+  },
 
   setCurrentScreen: (screen) => set({ currentScreen: screen }),
   setThemeMode: (mode) => set({ themeMode: mode }),
@@ -112,10 +133,11 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     } catch (e) {
       console.warn('Could not retrieve host token:', e);
     }
+    await get().fetchVisibleWindows();
     await get().refreshAll();
   },
 
-  refreshAll: async () => {
+  refreshAll: async (showLoading = false) => {
     try {
       if (!defaultIpcClient.getToken() && typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { getToken: () => Promise<string | null> } }).netSplitHost?.getToken) {
         const token = await (window as unknown as { netSplitHost: { getToken: () => Promise<string | null> } }).netSplitHost.getToken();
@@ -125,7 +147,9 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       }
     } catch {}
 
-    set({ isLoading: true, lastError: null });
+    if (showLoading) {
+      set({ isLoading: true, lastError: null });
+    }
     try {
       const [status, adapters, apps, cfg, activity] = await Promise.all([
         defaultIpcClient.getStatus().catch(() => null),
@@ -133,6 +157,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
         defaultIpcClient.listApps().catch(() => []),
         defaultIpcClient.getConfig().catch(() => null),
         defaultIpcClient.listActivity().catch(() => []),
+        get().fetchVisibleWindows().catch(() => {}),
       ]);
 
       // Derive rules from apps that have assigned adapters
@@ -267,12 +292,13 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
 
   verifyRules: async () => {
-    set({ isLoading: true });
+    set({ isVerifyingRules: true });
     try {
       await defaultIpcClient.verifyRules();
-      await get().refreshAll();
+      await get().refreshAll(false);
+      set({ isVerifyingRules: false });
     } catch (err: unknown) {
-      set({ lastError: String(err), isLoading: false });
+      set({ lastError: String(err), isVerifyingRules: false });
     }
   },
 

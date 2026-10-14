@@ -1,7 +1,15 @@
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
 #include <string>
+
+#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "advapi32.lib")
 
 static bool IsElevated() {
     BOOL isElevated = FALSE;
@@ -17,22 +25,97 @@ static bool IsElevated() {
     return isElevated != 0;
 }
 
-static bool IsServiceAlreadyRunning() {
+static void EnableDebugPrivilege() {
+    HANDLE hToken;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
+        TOKEN_PRIVILEGES tp;
+        tp.PrivilegeCount = 1;
+        LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &tp.Privileges[0].Luid);
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL);
+        CloseHandle(hToken);
+    }
+}
+
+static bool IsPortResponding(int port) {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return false;
+
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) {
+        WSACleanup();
+        return false;
+    }
+
+    DWORD timeout = 400;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+
+    sockaddr_in addr = { 0 };
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    addr.sin_port = htons(port);
+
+    bool ok = (connect(s, (sockaddr*)&addr, sizeof(addr)) != SOCKET_ERROR);
+    closesocket(s);
+    WSACleanup();
+    return ok;
+}
+
+static void KillZombieServiceProcesses() {
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnap == INVALID_HANDLE_VALUE) return false;
+    if (hSnap == INVALID_HANDLE_VALUE) return;
 
     PROCESSENTRY32W pe = { sizeof(pe) };
-    bool found = false;
     if (Process32FirstW(hSnap, &pe)) {
         do {
             if (_wcsicmp(pe.szExeFile, L"NetSplitService.exe") == 0) {
-                found = true;
-                break;
+                HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                if (hProc) {
+                    TerminateProcess(hProc, 0);
+                    CloseHandle(hProc);
+                }
             }
         } while (Process32NextW(hSnap, &pe));
     }
     CloseHandle(hSnap);
-    return found;
+}
+
+static void RestartOrStartService(const std::wstring& dir) {
+    // 1. If Windows Service is installed in SCM, restart it cleanly
+    SC_HANDLE schSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    bool isWindowsService = false;
+    if (schSCM) {
+        SC_HANDLE schSvc = OpenServiceW(schSCM, L"NetSplitService", SERVICE_STOP | SERVICE_START | SERVICE_QUERY_STATUS);
+        if (schSvc) {
+            isWindowsService = true;
+            SERVICE_STATUS status;
+            ControlService(schSvc, SERVICE_CONTROL_STOP, &status);
+            Sleep(400);
+            KillZombieServiceProcesses();
+            Sleep(300);
+            StartServiceW(schSvc, 0, NULL);
+            CloseServiceHandle(schSvc);
+        }
+        CloseServiceHandle(schSCM);
+    }
+
+    // 2. If not a Windows Service, kill any lingering zombie processes and start standalone daemon
+    if (!isWindowsService) {
+        KillZombieServiceProcesses();
+        Sleep(300);
+
+        std::wstring serviceExe = dir + L"\\native\\windows-service\\NetSplitService.exe";
+        STARTUPINFOW siService = { sizeof(siService) };
+        PROCESS_INFORMATION piService = { 0 };
+        siService.dwFlags = STARTF_USESHOWWINDOW;
+        siService.wShowWindow = SW_HIDE;
+        std::wstring serviceCmd = L"\"" + serviceExe + L"\" --background";
+        if (CreateProcessW(NULL, &serviceCmd[0], NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, dir.c_str(), &siService, &piService)) {
+            CloseHandle(piService.hProcess);
+            CloseHandle(piService.hThread);
+        }
+    }
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
@@ -65,21 +148,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-    // 2. Ensure NetSplitService is running
-    // If not running, launch NetSplitService.exe elevated in background
-    if (!IsServiceAlreadyRunning()) {
-        std::wstring serviceExe = dir + L"\\native\\windows-service\\NetSplitService.exe";
-        STARTUPINFOW siService = { sizeof(siService) };
-        PROCESS_INFORMATION piService = { 0 };
-        siService.dwFlags = STARTF_USESHOWWINDOW;
-        siService.wShowWindow = SW_HIDE;
-        std::wstring serviceCmd = L"\"" + serviceExe + L"\" --background";
-        if (CreateProcessW(NULL, &serviceCmd[0], NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, dir.c_str(), &siService, &piService)) {
-            CloseHandle(piService.hProcess);
-            CloseHandle(piService.hThread);
+    EnableDebugPrivilege();
+
+    // 2. Ensure NetSplitService is HEALTHY and listening on port 48192
+    if (!IsPortResponding(48192)) {
+        RestartOrStartService(dir);
+        // Wait up to 6 seconds for port 48192 to become ready
+        for (int i = 0; i < 24; i++) {
+            Sleep(250);
+            if (IsPortResponding(48192)) break;
         }
-        // Give service a moment to initialize token and socket
-        Sleep(600);
     }
 
     // 3. Launch the NetSplit Desktop GUI Application window (elevated)

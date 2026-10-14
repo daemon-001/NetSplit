@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, Modal } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { defaultIpcClient } from '../services/ipcClient';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
@@ -17,19 +17,70 @@ export const SettingsScreen: React.FC = () => {
   const refreshAll = useNetSplitStore((state) => state.refreshAll);
 
   const [isRestarting, setIsRestarting] = useState(false);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [isUninstalling, setIsUninstalling] = useState(false);
+  const [showUninstallModal, setShowUninstallModal] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const handleInstallService = async () => {
+    setIsInstalling(true);
+    setStatusMessage(null);
+    try {
+      const res = await (window as any).netSplitHost?.installService?.();
+      if (res?.token) {
+        defaultIpcClient.setToken(res.token);
+      }
+      await refreshAll();
+      setStatusMessage({ text: 'NetSplit Windows Service successfully installed and started in background.', type: 'success' });
+    } catch (e) {
+      console.warn('Install service error:', e);
+      setStatusMessage({ text: 'Failed to install service. Please ensure administrator access was granted.', type: 'error' });
+    } finally {
+      setIsInstalling(false);
+    }
+  };
 
   const handleRestartElevated = async () => {
     setIsRestarting(true);
+    setStatusMessage(null);
     try {
       const res = await (window as any).netSplitHost?.elevateService?.();
       if (res?.token) {
         defaultIpcClient.setToken(res.token);
       }
       await refreshAll();
+      setStatusMessage({ text: 'NetSplit Service restarted with full administrative privileges.', type: 'success' });
     } catch (e) {
       console.warn('Elevate service error:', e);
+      setStatusMessage({ text: 'Restart service elevated encountered an error.', type: 'error' });
     } finally {
       setIsRestarting(false);
+    }
+  };
+
+  const handleConfirmUninstall = async () => {
+    setIsUninstalling(true);
+    setStatusMessage(null);
+    try {
+      await (window as any).netSplitHost?.uninstallService?.();
+      defaultIpcClient.setToken('');
+      setShowUninstallModal(false);
+      setStatusMessage({
+        text: 'NetSplit Windows Service has been completely uninstalled. All background rules and WFP filters were cleanly freed.',
+        type: 'success',
+      });
+      useNetSplitStore.setState({
+        serviceConnected: false,
+        systemStatus: null,
+        rules: [],
+        adapters: [],
+      });
+      await refreshAll();
+    } catch (e) {
+      console.warn('Uninstall service error:', e);
+      setStatusMessage({ text: 'Failed to uninstall service. Ensure UAC Administrator permissions were granted.', type: 'error' });
+    } finally {
+      setIsUninstalling(false);
     }
   };
 
@@ -296,6 +347,29 @@ export const SettingsScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Global Status Message Banner if present */}
+      {statusMessage && (
+        <View
+          style={[
+            styles.statusBanner,
+            {
+              backgroundColor: statusMessage.type === 'success' ? theme.successSubtle : theme.errorSubtle,
+              borderColor: statusMessage.type === 'success' ? theme.success : theme.error,
+            },
+          ]}
+        >
+          <Text
+            style={{
+              color: statusMessage.type === 'success' ? theme.success : theme.error,
+              fontSize: 12,
+              fontWeight: '500',
+            }}
+          >
+            {statusMessage.type === 'success' ? '✅' : '⚠️'} {statusMessage.text}
+          </Text>
+        </View>
+      )}
+
       {/* Windows Service Permanent Installation Card */}
       <View style={[styles.card, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
         <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 6 }]}>
@@ -305,13 +379,20 @@ export const SettingsScreen: React.FC = () => {
           Installing NetSplit as a Windows Service allows it to run automatically on Windows boot under NT AUTHORITY\SYSTEM with full administrative privileges, eliminating UAC prompts and ensuring seamless network adapter metric and route enforcement.
         </Text>
 
-        <View style={{ flexDirection: 'row', gap: 10 }}>
+        <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
           <TouchableOpacity
-            style={[styles.installServiceBtn, { backgroundColor: theme.accent }]}
-            onPress={() => (window as any).netSplitHost?.installService?.()}
+            style={[
+              styles.installServiceBtn,
+              {
+                backgroundColor: theme.accent,
+                opacity: isInstalling ? 0.7 : 1,
+              },
+            ]}
+            onPress={handleInstallService}
+            disabled={isInstalling || isRestarting || isUninstalling}
           >
             <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
-              🛡️ Install as Windows Service
+              {isInstalling ? '⏳ Installing Service...' : '🛡️ Install as Windows Service'}
             </Text>
           </TouchableOpacity>
 
@@ -326,7 +407,7 @@ export const SettingsScreen: React.FC = () => {
               },
             ]}
             onPress={handleRestartElevated}
-            disabled={isRestarting}
+            disabled={isInstalling || isRestarting || isUninstalling}
           >
             <Text style={{ color: theme.textPrimary, fontSize: 12 }}>
               {isRestarting ? '⏳ Restarting Service...' : '⚡ Restart Service Elevated'}
@@ -335,26 +416,81 @@ export const SettingsScreen: React.FC = () => {
         </View>
       </View>
 
-
-      {/* Uninstall and Clean Recovery Guidance */}
+      {/* Clean Uninstall & System Recovery */}
       <View style={[styles.card, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
         <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 6 }]}>
-          Clean Uninstall & Recovery Guidance
+          Clean Uninstall & Recovery
         </Text>
-        <Text style={[styles.policyDesc, { color: theme.textSecondary, marginBottom: 12 }]}>
-          NetSplit uses exclusively dynamic WFP sessions (`FWPM_SESSION_FLAG_DYNAMIC`). All rules are automatically freed by Windows upon exit. To cleanly uninstall the service:
+        <Text style={[styles.policyDesc, { color: theme.textSecondary, marginBottom: 14 }]}>
+          NetSplit uses exclusively dynamic WFP sessions (`FWPM_SESSION_FLAG_DYNAMIC`). All rules are automatically freed by Windows upon exit. To completely remove the background service from Windows SCM, release all kernel filters, and restore default interface routing metrics:
         </Text>
 
-        <View style={[styles.codeBox, { backgroundColor: theme.surfaceSubtle, borderColor: theme.border }]}>
-          <Text style={[styles.codeText, { color: theme.textPrimary }]}>
-            # Run in elevated PowerShell to completely remove the background service:{'\n'}
-            .\native\windows-service\NetSplitService.exe --uninstall
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity
+            style={[
+              styles.installServiceBtn,
+              {
+                backgroundColor: theme.error,
+                opacity: isUninstalling ? 0.7 : 1,
+              },
+            ]}
+            onPress={() => setShowUninstallModal(true)}
+            disabled={isInstalling || isRestarting || isUninstalling}
+          >
+            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
+              {isUninstalling ? '⏳ Uninstalling Service...' : '🗑️ Clean Uninstall Service'}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
+
+      {/* Confirmation Modal for Clean Uninstall */}
+      <Modal
+        visible={showUninstallModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !isUninstalling && setShowUninstallModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { backgroundColor: theme.surfaceCard, borderColor: theme.borderStrong }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
+              <Text style={{ fontSize: 24 }}>⚠️</Text>
+              <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>
+                Confirm Clean Uninstall
+              </Text>
+            </View>
+
+            <Text style={[styles.modalDesc, { color: theme.textSecondary, marginBottom: 20 }]}>
+              This will completely stop the background NetSplit service, delete the service registration from Windows Service Control Manager (SCM), terminate any background routing processes, release all dynamic WFP kernel filters, and restore all network adapter route metrics to automatic Windows defaults.{'\n\n'}
+              Are you sure you want to completely uninstall the NetSplit service?
+            </Text>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10 }}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: theme.surfaceHover, borderWidth: 1, borderColor: theme.border }]}
+                onPress={() => setShowUninstallModal(false)}
+                disabled={isUninstalling}
+              >
+                <Text style={{ color: theme.textPrimary, fontSize: 12, fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: theme.error, opacity: isUninstalling ? 0.7 : 1 }]}
+                onPress={handleConfirmUninstall}
+                disabled={isUninstalling}
+              >
+                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>
+                  {isUninstalling ? '⏳ Uninstalling...' : 'Yes, Clean Uninstall'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
+
 
 const styles = StyleSheet.create({
   container: {
@@ -481,4 +617,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  modalCard: {
+    width: 480,
+    maxWidth: '95%',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    padding: spacing.xl,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.45,
+    shadowRadius: 20,
+    elevation: 16,
+  },
+  modalTitle: {
+    fontFamily: typography.fontFamilyDisplay,
+    fontSize: typography.sizes.md,
+    fontWeight: typography.weights.bold,
+  },
+  modalDesc: {
+    fontFamily: typography.fontFamily,
+    fontSize: typography.sizes.xs,
+    lineHeight: 18,
+  },
+  modalBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBanner: {
+    padding: spacing.md,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+  },
 });
+

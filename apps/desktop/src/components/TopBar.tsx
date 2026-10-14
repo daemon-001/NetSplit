@@ -90,7 +90,7 @@ export const TopBar: React.FC = () => {
             styles.iconButton,
             { backgroundColor: theme.surfaceSubtle, borderColor: theme.border },
           ]}
-          onPress={() => refreshAll()}
+          onPress={() => refreshAll(true)}
           disabled={isLoading}
         >
           <RefreshIcon size={14} color={isLoading ? theme.textTertiary : theme.textPrimary} />

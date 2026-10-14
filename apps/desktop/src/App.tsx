@@ -35,10 +35,24 @@ export const App: React.FC = () => {
       });
     }
 
-    // Periodic sync every 4 seconds to maintain fresh telemetry
+    // Listen for service uninstalled events from Electron host
+    if (typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { onServiceUninstalled?: (cb: () => void) => void } }).netSplitHost?.onServiceUninstalled) {
+      (window as unknown as { netSplitHost: { onServiceUninstalled: (cb: () => void) => void } }).netSplitHost.onServiceUninstalled(() => {
+        defaultIpcClient.setToken('');
+        useNetSplitStore.setState({
+          serviceConnected: false,
+          systemStatus: null,
+          rules: [],
+          adapters: [],
+        });
+      });
+    }
+
+
+    // Periodic sync every 5 seconds to maintain fresh telemetry quietly in background
     const interval = setInterval(() => {
-      refreshAll();
-    }, 4000);
+      refreshAll(false);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [init, refreshAll]);

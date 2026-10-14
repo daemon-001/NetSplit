@@ -41,13 +41,13 @@ static std::wstring StringToWString(const std::string& str) {
 
 static std::string GetAppDataFolder() {
     wchar_t path[MAX_PATH];
-    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path))) {
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, path))) {
         std::wstring wpath = path;
         wpath += L"\\NetSplit";
         CreateDirectoryW(wpath.c_str(), NULL);
         return WStringToString(wpath);
     }
-    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, path))) {
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path))) {
         std::wstring wpath = path;
         wpath += L"\\NetSplit";
         CreateDirectoryW(wpath.c_str(), NULL);
