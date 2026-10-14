@@ -1,6 +1,9 @@
 #include "wfp_routing_engine.hpp"
 #include <stdio.h>
 #include <sstream>
+#include <tlhelp32.h>
+#include <psapi.h>
+#include <shlwapi.h>
 
 // NetSplit WFP Provider GUID: {7B58C894-1B41-4F4D-911A-8F3E6E5A4B11}
 static const GUID NETSPLIT_PROVIDER_KEY = 
@@ -27,8 +30,39 @@ WfpRoutingEngine::~WfpRoutingEngine() {
 
 bool WfpRoutingEngine::Initialize() {
     m_running = true;
+
+    // Resolve NetSplitRouter.dll (x64) and NetSplitRouter32.dll (x86)
+    wchar_t modPath[MAX_PATH];
+    GetModuleFileNameW(NULL, modPath, MAX_PATH);
+    std::wstring dir = modPath;
+    size_t slash = dir.find_last_of(L"\\/");
+    if (slash != std::wstring::npos) dir = dir.substr(0, slash);
+
+    std::vector<std::wstring> searchDirs = {
+        dir,
+        dir + L"\\..\\router",
+        dir + L"\\native\\router",
+        dir + L"\\native\\windows-service"
+    };
+
+    for (const auto& d : searchDirs) {
+        std::wstring p64 = d + L"\\NetSplitRouter.dll";
+        if (m_routerDllPath.empty() && PathFileExistsW(p64.c_str())) {
+            m_routerDllPath = p64;
+        }
+        std::wstring p32 = d + L"\\NetSplitRouter32.dll";
+        if (m_routerDll32Path.empty() && PathFileExistsW(p32.c_str())) {
+            m_routerDll32Path = p32;
+        }
+    }
+    if (m_routerDllPath.empty()) m_routerDllPath = dir + L"\\NetSplitRouter.dll";
+    if (m_routerDll32Path.empty()) m_routerDll32Path = dir + L"\\NetSplitRouter32.dll";
+
+    InitSharedMemory();
     StartProxyBroker();
     InitWfpEngine();
+
+    m_watcherThread = std::thread(&WfpRoutingEngine::WatcherWorkerLoop, this);
     return true;
 }
 
@@ -36,9 +70,148 @@ void WfpRoutingEngine::Shutdown() {
     if (!m_running) return;
     m_running = false;
 
+    if (m_watcherThread.joinable()) {
+        m_watcherThread.join();
+    }
+
     StopProxyBroker();
     CloseWfpEngine();
+    CloseSharedMemory();
 }
+
+void WfpRoutingEngine::InitSharedMemory() {
+    SECURITY_DESCRIPTOR sd;
+    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
+    SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);
+    SECURITY_ATTRIBUTES sa = { sizeof(sa), &sd, FALSE };
+
+    // Try Global first so any session (desktop or service) can access it
+    m_hSharedMap = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0, sizeof(SharedRoutingTable), NETSPLIT_SHARED_MEM_GLOBAL);
+    if (!m_hSharedMap) {
+        m_hSharedMap = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0, sizeof(SharedRoutingTable), NETSPLIT_SHARED_MEM_NAME);
+    }
+    if (m_hSharedMap) {
+        m_pSharedTable = (SharedRoutingTable*)MapViewOfFile(m_hSharedMap, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(SharedRoutingTable));
+        if (m_pSharedTable) {
+            memset(m_pSharedTable, 0, sizeof(SharedRoutingTable));
+            m_pSharedTable->magic = 0x4E53504C;
+            m_pSharedTable->version = 1;
+            m_pSharedTable->ruleCount = 0;
+        }
+    }
+}
+
+void WfpRoutingEngine::CloseSharedMemory() {
+    if (m_pSharedTable) {
+        memset(m_pSharedTable, 0, sizeof(SharedRoutingTable));
+        UnmapViewOfFile(m_pSharedTable);
+        m_pSharedTable = NULL;
+    }
+    if (m_hSharedMap) {
+        CloseHandle(m_hSharedMap);
+        m_hSharedMap = NULL;
+    }
+}
+
+void WfpRoutingEngine::UpdateSharedTable() {
+    if (!m_pSharedTable) return;
+
+    DWORD idx = 0;
+    for (const auto& kv : m_appliedRules) {
+        if (idx >= NETSPLIT_MAX_RULES) break;
+        const auto& r = kv.second;
+        SharedProcessRule& sp = m_pSharedTable->rules[idx];
+        wcsncpy_s(sp.executablePath, MAX_PATH, r.executablePath.c_str(), _TRUNCATE);
+        sp.ifIndex = r.targetIfIndex;
+        sp.ipv6IfIndex = r.targetIpv6IfIndex;
+        strncpy_s(sp.localIpv4, sizeof(sp.localIpv4), r.targetLocalIp.c_str(), _TRUNCATE);
+        strncpy_s(sp.localIpv6, sizeof(sp.localIpv6), r.targetLocalIpv6.c_str(), _TRUNCATE);
+        sp.blockIfDown = (r.fallbackMode == "BLOCK");
+        sp.isAdapterUp = true;
+        sp.active = true;
+        idx++;
+    }
+    m_pSharedTable->ruleCount = idx;
+    m_pSharedTable->version++;
+}
+
+void WfpRoutingEngine::InjectProcess(DWORD pid) {
+    if (pid <= 4 || pid == GetCurrentProcessId() || m_routerDllPath.empty()) return;
+
+    HANDLE hProc = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, pid);
+    if (!hProc) return;
+
+    BOOL isWow64 = FALSE;
+    IsWow64Process(hProc, &isWow64);
+    std::wstring dllToInject = (isWow64 && !m_routerDll32Path.empty()) ? m_routerDll32Path : m_routerDllPath;
+
+    // Check if NetSplitRouter is already loaded
+    HMODULE hMods[512];
+    DWORD cbNeeded = 0;
+    bool alreadyLoaded = false;
+    if (K32EnumProcessModules(hProc, hMods, sizeof(hMods), &cbNeeded)) {
+        DWORD count = cbNeeded / sizeof(HMODULE);
+        for (DWORD i = 0; i < count; ++i) {
+            wchar_t szMod[MAX_PATH];
+            if (K32GetModuleFileNameExW(hProc, hMods[i], szMod, MAX_PATH)) {
+                if (wcsstr(szMod, L"NetSplitRouter") != NULL) {
+                    alreadyLoaded = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!alreadyLoaded) {
+        size_t bytes = (dllToInject.size() + 1) * sizeof(wchar_t);
+        void* pRemote = VirtualAllocEx(hProc, NULL, bytes, MEM_COMMIT, PAGE_READWRITE);
+        if (pRemote) {
+            WriteProcessMemory(hProc, pRemote, dllToInject.c_str(), bytes, NULL);
+            void* pLoadLibraryW = (void*)GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryW");
+            HANDLE hThread = CreateRemoteThread(hProc, NULL, 0, (LPTHREAD_START_ROUTINE)pLoadLibraryW, pRemote, 0, NULL);
+            if (hThread) {
+                WaitForSingleObject(hThread, 500);
+                CloseHandle(hThread);
+            }
+            VirtualFreeEx(hProc, pRemote, 0, MEM_RELEASE);
+        }
+    }
+    CloseHandle(hProc);
+}
+
+void WfpRoutingEngine::WatcherWorkerLoop() {
+    while (m_running) {
+        Sleep(1000);
+        if (!m_running) break;
+
+        std::lock_guard<std::recursive_mutex> lock(m_mutex);
+        if (m_appliedRules.empty()) continue;
+
+        HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if (hSnap == INVALID_HANDLE_VALUE) continue;
+
+        PROCESSENTRY32W pe = { sizeof(pe) };
+        if (Process32FirstW(hSnap, &pe)) {
+            do {
+                if (pe.th32ProcessID <= 4) continue;
+
+                for (const auto& kv : m_appliedRules) {
+                    const auto& r = kv.second;
+                    std::wstring ruleExe = r.executablePath;
+                    size_t slash = ruleExe.find_last_of(L"\\/");
+                    std::wstring baseName = (slash != std::wstring::npos) ? ruleExe.substr(slash + 1) : ruleExe;
+
+                    if (_wcsicmp(pe.szExeFile, baseName.c_str()) == 0) {
+                        InjectProcess(pe.th32ProcessID);
+                        break;
+                    }
+                }
+            } while (Process32NextW(hSnap, &pe));
+        }
+        CloseHandle(hSnap);
+    }
+}
+
 
 bool WfpRoutingEngine::InitWfpEngine() {
     FWPM_SESSION0 session = {0};
@@ -98,7 +271,9 @@ bool WfpRoutingEngine::ApplyRule(const AssignmentRule& rule, std::string& outErr
     activeRule.applicationId = rule.applicationId;
     activeRule.executablePath = rule.executablePath;
     activeRule.targetIfIndex = pAdapter->ifIndex;
+    activeRule.targetIpv6IfIndex = pAdapter->ipv6IfIndex;
     activeRule.targetLocalIp = pAdapter->ipv4Addresses.empty() ? "" : pAdapter->ipv4Addresses[0];
+    activeRule.targetLocalIpv6 = pAdapter->ipv6Addresses.empty() ? "" : pAdapter->ipv6Addresses[0];
     activeRule.fallbackMode = rule.fallbackMode;
 
     if (m_engineHandle) {
@@ -135,25 +310,87 @@ bool WfpRoutingEngine::ApplyRule(const AssignmentRule& rule, std::string& outErr
 
             if (status == ERROR_SUCCESS) {
                 activeRule.filterId = filterId;
-                activeRule.isFilterActive = true;
-                m_appliedRules[rule.id] = activeRule;
-                return true;
-            } else {
-                outError = "FwpmFilterAdd0 failed with code: " + std::to_string(status);
-                activeRule.isFilterActive = false;
-                m_appliedRules[rule.id] = activeRule;
-                return false;
             }
-        } else {
-            outError = "Failed to resolve WFP AppId for: " + WStringToString(rule.executablePath);
-            return false;
         }
-    } else {
-        // Service running without elevation: register in broker state
-        activeRule.isFilterActive = true;
-        m_appliedRules[rule.id] = activeRule;
-        return true;
     }
+
+    activeRule.isFilterActive = true;
+    m_appliedRules[rule.id] = activeRule;
+    UpdateSharedTable();
+
+    // Immediately inject into all currently running instances
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe = { sizeof(pe) };
+        if (Process32FirstW(hSnap, &pe)) {
+            std::wstring ruleExe = rule.executablePath;
+            size_t slash = ruleExe.find_last_of(L"\\/");
+            std::wstring baseName = (slash != std::wstring::npos) ? ruleExe.substr(slash + 1) : ruleExe;
+            do {
+                if (pe.th32ProcessID > 4 && _wcsicmp(pe.szExeFile, baseName.c_str()) == 0) {
+                    InjectProcess(pe.th32ProcessID);
+                }
+            } while (Process32NextW(hSnap, &pe));
+        }
+        CloseHandle(hSnap);
+    }
+
+    // Reset stale TCP connections so the running app immediately switches to the new adapter!
+    std::wstring ruleExe = rule.executablePath;
+    size_t slash = ruleExe.find_last_of(L"\\/");
+    std::wstring baseName = (slash != std::wstring::npos) ? ruleExe.substr(slash + 1) : ruleExe;
+    ResetConnectionsForProcessName(baseName);
+
+    return true;
+}
+
+void WfpRoutingEngine::ResetConnectionsForPids(const std::vector<DWORD>& pids) {
+    if (pids.empty()) return;
+
+    DWORD size = 0;
+    GetExtendedTcpTable(NULL, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0);
+    if (size == 0) return;
+
+    std::vector<BYTE> buffer(size);
+    if (GetExtendedTcpTable(buffer.data(), &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_ALL, 0) == NO_ERROR) {
+        MIB_TCPTABLE_OWNER_PID* pTable = (MIB_TCPTABLE_OWNER_PID*)buffer.data();
+        for (DWORD i = 0; i < pTable->dwNumEntries; ++i) {
+            MIB_TCPROW_OWNER_PID& row = pTable->table[i];
+            for (DWORD pid : pids) {
+                if (row.dwOwningPid == pid) {
+                    // Do not close internal loopback connections (127.0.0.0/8)
+                    if ((ntohl(row.dwRemoteAddr) & 0xFF000000) != 0x7F000000 &&
+                        (ntohl(row.dwLocalAddr) & 0xFF000000) != 0x7F000000) {
+                        MIB_TCPROW closeRow = {0};
+                        closeRow.dwState = 12; // MIB_TCP_STATE_DELETE_TCB
+                        closeRow.dwLocalAddr = row.dwLocalAddr;
+                        closeRow.dwLocalPort = row.dwLocalPort;
+                        closeRow.dwRemoteAddr = row.dwRemoteAddr;
+                        closeRow.dwRemotePort = row.dwRemotePort;
+                        SetTcpEntry(&closeRow);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void WfpRoutingEngine::ResetConnectionsForProcessName(const std::wstring& processName) {
+    std::vector<DWORD> pids;
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe = { sizeof(pe) };
+        if (Process32FirstW(hSnap, &pe)) {
+            do {
+                if (pe.th32ProcessID > 4 && _wcsicmp(pe.szExeFile, processName.c_str()) == 0) {
+                    pids.push_back(pe.th32ProcessID);
+                }
+            } while (Process32NextW(hSnap, &pe));
+        }
+        CloseHandle(hSnap);
+    }
+    ResetConnectionsForPids(pids);
 }
 
 bool WfpRoutingEngine::RemoveRule(const std::string& ruleId, std::string& outError) {
@@ -164,10 +401,18 @@ bool WfpRoutingEngine::RemoveRule(const std::string& ruleId, std::string& outErr
         return false;
     }
 
+    std::wstring exePath = it->second.executablePath;
+    size_t slash = exePath.find_last_of(L"\\/");
+    std::wstring baseName = (slash != std::wstring::npos) ? exePath.substr(slash + 1) : exePath;
+
     if (m_engineHandle && it->second.filterId != 0) {
         FwpmFilterDeleteById0(m_engineHandle, it->second.filterId);
     }
     m_appliedRules.erase(it);
+    UpdateSharedTable();
+
+    // Reset stale TCP connections so the app returns to default network
+    ResetConnectionsForProcessName(baseName);
     return true;
 }
 

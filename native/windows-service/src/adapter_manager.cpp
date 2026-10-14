@@ -252,24 +252,34 @@ NetAdapterRecord* AdapterManager::FindAdapterByIndex(DWORD ifIndex) {
 bool AdapterManager::SetDefaultAdapter(const std::string& adapterId, std::string& outError) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    if (adapterId.empty() || adapterId == "WINDOWS_AUTO") {
-        // Reset all interfaces to AutomaticMetric = TRUE for both IPv4 and IPv6
+    // If adapterId is empty or "WINDOWS_AUTO", reset to automatic metric for all adapters
+    if (adapterId.empty() || adapterId == "WINDOWS_AUTO" || adapterId == "windows_auto") {
         for (const auto& a : m_adapters) {
+            // IPv4
             MIB_IPINTERFACE_ROW row;
             InitializeIpInterfaceEntry(&row);
             row.Family = AF_INET;
             row.InterfaceIndex = a.ifIndex;
-            if (GetIpInterfaceEntry(&row) == NO_ERROR) {
-                row.UseAutomaticMetric = TRUE;
-                SetIpInterfaceEntry(&row);
+            row.UseAutomaticMetric = TRUE;
+            row.SitePrefixLength = 0;
+            DWORD err4 = SetIpInterfaceEntry(&row);
+            if (err4 != NO_ERROR && err4 != ERROR_ACCESS_DENIED) {
+                char cmd[256];
+                snprintf(cmd, sizeof(cmd), "netsh interface ipv4 set interface %lu metric=automatic >nul 2>&1", a.ifIndex);
+                system(cmd);
             }
 
-            InitializeIpInterfaceEntry(&row);
-            row.Family = AF_INET6;
-            row.InterfaceIndex = a.ifIndex;
-            if (GetIpInterfaceEntry(&row) == NO_ERROR) {
-                row.UseAutomaticMetric = TRUE;
-                SetIpInterfaceEntry(&row);
+            // IPv6
+            MIB_IPINTERFACE_ROW row6;
+            InitializeIpInterfaceEntry(&row6);
+            row6.Family = AF_INET6;
+            row6.InterfaceIndex = (a.ipv6IfIndex != 0) ? a.ipv6IfIndex : a.ifIndex;
+            row6.UseAutomaticMetric = TRUE;
+            DWORD err6 = SetIpInterfaceEntry(&row6);
+            if (err6 != NO_ERROR && err6 != ERROR_ACCESS_DENIED) {
+                char cmd[256];
+                snprintf(cmd, sizeof(cmd), "netsh interface ipv6 set interface %lu metric=automatic >nul 2>&1", (a.ipv6IfIndex != 0) ? a.ipv6IfIndex : a.ifIndex);
+                system(cmd);
             }
         }
 
@@ -306,33 +316,49 @@ bool AdapterManager::SetDefaultAdapter(const std::string& adapterId, std::string
     // Set target interface to lowest metric (5), others to higher metric (35)
     // Applies to both IPv4 and IPv6 so unassigned programs default through this adapter
     for (const auto& a : m_adapters) {
+        ULONG metric = (a.ifIndex == targetIndex) ? 5 : 35;
+
         // IPv4
         MIB_IPINTERFACE_ROW row;
         InitializeIpInterfaceEntry(&row);
         row.Family = AF_INET;
         row.InterfaceIndex = a.ifIndex;
-        if (GetIpInterfaceEntry(&row) == NO_ERROR) {
-            row.UseAutomaticMetric = FALSE;
-            row.Metric = (a.ifIndex == targetIndex) ? 5 : 35;
-            DWORD err = SetIpInterfaceEntry(&row);
-            if (a.ifIndex == targetIndex && err != NO_ERROR) {
-                if (err == ERROR_ACCESS_DENIED) {
-                    outError = "Administrator privileges required to change Windows default adapter metric. Please run NetSplit as Administrator or install the Windows Service.";
-                } else {
-                    outError = "SetIpInterfaceEntry IPv4 failed: " + std::to_string(err);
-                }
-                return false;
+        row.UseAutomaticMetric = FALSE;
+        row.Metric = metric;
+        row.SitePrefixLength = 0;
+        DWORD err = SetIpInterfaceEntry(&row);
+
+        // Fallback to netsh if SetIpInterfaceEntry had an issue (e.g. parameter check)
+        if (err != NO_ERROR && err != ERROR_ACCESS_DENIED) {
+            char cmd[256];
+            snprintf(cmd, sizeof(cmd), "netsh interface ipv4 set interface %lu metric=%lu >nul 2>&1", a.ifIndex, metric);
+            int sysRes = system(cmd);
+            if (sysRes == 0) {
+                err = NO_ERROR;
             }
         }
 
+        if (a.ifIndex == targetIndex && err != NO_ERROR) {
+            if (err == ERROR_ACCESS_DENIED) {
+                outError = "Administrator privileges required to change Windows default adapter metric. Please run NetSplit as Administrator or install the Windows Service.";
+            } else {
+                outError = "SetIpInterfaceEntry IPv4 failed: " + std::to_string(err);
+            }
+            return false;
+        }
+
         // IPv6
-        InitializeIpInterfaceEntry(&row);
-        row.Family = AF_INET6;
-        row.InterfaceIndex = a.ifIndex;
-        if (GetIpInterfaceEntry(&row) == NO_ERROR) {
-            row.UseAutomaticMetric = FALSE;
-            row.Metric = (a.ifIndex == targetIndex) ? 5 : 35;
-            SetIpInterfaceEntry(&row);
+        MIB_IPINTERFACE_ROW row6;
+        InitializeIpInterfaceEntry(&row6);
+        row6.Family = AF_INET6;
+        row6.InterfaceIndex = (a.ipv6IfIndex != 0) ? a.ipv6IfIndex : a.ifIndex;
+        row6.UseAutomaticMetric = FALSE;
+        row6.Metric = metric;
+        DWORD err6 = SetIpInterfaceEntry(&row6);
+        if (err6 != NO_ERROR && err6 != ERROR_ACCESS_DENIED) {
+            char cmd[256];
+            snprintf(cmd, sizeof(cmd), "netsh interface ipv6 set interface %lu metric=%lu >nul 2>&1", (a.ipv6IfIndex != 0) ? a.ipv6IfIndex : a.ifIndex, metric);
+            system(cmd);
         }
     }
 

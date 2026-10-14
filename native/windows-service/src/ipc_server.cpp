@@ -44,6 +44,26 @@ static std::string JsonEscape(const std::string& s) {
     return o.str();
 }
 
+static std::string UnescapeJsonString(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        if (in[i] == '\\' && i + 1 < in.size()) {
+            char next = in[i + 1];
+            if (next == '\\') { out += '\\'; i++; }
+            else if (next == '"') { out += '"'; i++; }
+            else if (next == '/') { out += '/'; i++; }
+            else if (next == 'n') { out += '\n'; i++; }
+            else if (next == 'r') { out += '\r'; i++; }
+            else if (next == 't') { out += '\t'; i++; }
+            else { out += in[i]; }
+        } else {
+            out += in[i];
+        }
+    }
+    return out;
+}
+
 static std::string ExtractJsonValue(const std::string& json, const std::string& key) {
     size_t k = json.find("\"" + key + "\"");
     if (k == std::string::npos) return "";
@@ -51,9 +71,15 @@ static std::string ExtractJsonValue(const std::string& json, const std::string& 
     if (colon == std::string::npos) return "";
     size_t vStart = json.find('"', colon);
     if (vStart == std::string::npos) return "";
-    size_t vEnd = json.find('"', vStart + 1);
-    if (vEnd == std::string::npos) return "";
-    return json.substr(vStart + 1, vEnd - vStart - 1);
+    size_t vEnd = vStart + 1;
+    while (vEnd < json.size()) {
+        if (json[vEnd] == '"' && json[vEnd - 1] != '\\') {
+            break;
+        }
+        vEnd++;
+    }
+    if (vEnd >= json.size()) return "";
+    return UnescapeJsonString(json.substr(vStart + 1, vEnd - vStart - 1));
 }
 
 static bool ExtractJsonBool(const std::string& json, const std::string& key, bool def) {
@@ -336,6 +362,8 @@ std::string IpcServer::ProcessJsonRpc(const std::string& requestBody) {
         return HandleSetDefaultAdapter(id, requestBody);
     } else if (method == "activity.list") {
         return HandleListActivity(id);
+    } else if (method == "system.shutdown") {
+        return HandleShutdown(id);
     }
 
     return "{\"jsonrpc\":\"2.0\",\"id\":\"" + id + "\",\"error\":{\"code\":-32601,\"message\":\"Method not found: " + JsonEscape(method) + "\"}}";
@@ -783,3 +811,13 @@ std::string IpcServer::HandleListActivity(const std::string& reqId) {
     ss << "]}";
     return ss.str();
 }
+
+std::string IpcServer::HandleShutdown(const std::string& reqId) {
+    LogActivity("INFO", "SYSTEM", "Service Shutdown Initiated", "Service shutdown requested via IPC");
+    std::thread([]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        ExitProcess(0);
+    }).detach();
+    return "{\"jsonrpc\":\"2.0\",\"id\":\"" + reqId + "\",\"result\":{\"success\":true,\"message\":\"Service daemon shutting down\"}}";
+}
+

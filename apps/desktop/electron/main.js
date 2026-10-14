@@ -106,9 +106,14 @@ ipcMain.handle('get-token', async () => {
 ipcMain.handle('elevate-service', async () => {
   const serviceExe = getServicePath();
   const { exec } = require('child_process');
-  exec('taskkill /F /IM NetSplitService.exe', () => {
-    const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
-    exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`);
+  
+  // Cleanly terminate any running instance via WMI and taskkill
+  const killCmd = `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \\"Name = 'NetSplitService.exe'\\") | Invoke-CimMethod -MethodName Terminate; taskkill /F /IM NetSplitService.exe"`;
+  exec(killCmd, () => {
+    setTimeout(() => {
+      const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
+      exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`);
+    }, 300);
   });
   return true;
 });

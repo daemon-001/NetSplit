@@ -37,7 +37,20 @@ static std::string GetAppDataFolder() {
     return ".\\data";
 }
 
+static void EnableDebugPrivilege() {
+    HANDLE hToken;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken)) {
+        TOKEN_PRIVILEGES tp;
+        tp.PrivilegeCount = 1;
+        LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &tp.Privileges[0].Luid);
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        AdjustTokenPrivileges(hToken, FALSE, &tp, sizeof(tp), NULL, NULL);
+        CloseHandle(hToken);
+    }
+}
+
 void RunDaemon(bool isService) {
+    EnableDebugPrivilege();
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
 
