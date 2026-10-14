@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNetSplitStore } from './store/useNetSplitStore';
 import { darkTheme, lightTheme, typography } from './theme';
 import { Sidebar } from './components/Sidebar';
@@ -17,6 +17,7 @@ export const App: React.FC = () => {
   const init = useNetSplitStore((state) => state.init);
   const refreshAll = useNetSplitStore((state) => state.refreshAll);
   const serviceConnected = useNetSplitStore((state) => state.serviceConnected);
+  const systemStatus = useNetSplitStore((state) => state.systemStatus);
   const lastError = useNetSplitStore((state) => state.lastError);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
