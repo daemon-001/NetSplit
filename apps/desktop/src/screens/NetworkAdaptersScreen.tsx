@@ -20,8 +20,8 @@ export const NetworkAdaptersScreen: React.FC = () => {
   const activeAdapter = adapters.find((a) => a.id === selectedAdapterId) || adapters[0];
   const boundApps = activeAdapter ? apps.filter((a) => a.assignedAdapterId === activeAdapter.id) : [];
 
-  const formatLinkSpeed = (bps: number) => {
-    if (!bps || bps === 0) return 'Disconnected';
+  const formatLinkSpeed = (bps: number, status?: string) => {
+    if (!bps || bps === 0 || bps > 1000000000000 || status === 'DOWN') return 'Disconnected';
     if (bps >= 1000000000) return `${(bps / 1000000000).toFixed(1)} Gbps`;
     if (bps >= 1000000) return `${(bps / 1000000).toFixed(0)} Mbps`;
     return `${(bps / 1000).toFixed(0)} Kbps`;
@@ -144,16 +144,20 @@ export const NetworkAdaptersScreen: React.FC = () => {
             <View style={styles.propRow}>
               <Text style={[styles.propKey, { color: theme.textTertiary }]}>IPv4 Address:</Text>
               <Text style={[styles.propValMono, { color: theme.textPrimary }]}>
-                {activeAdapter.ipv4Addresses.join(', ') || 'No IPv4 address'}
+                {(activeAdapter.ipv4Addresses && activeAdapter.ipv4Addresses.length > 0)
+                  ? activeAdapter.ipv4Addresses.join(', ')
+                  : 'No IPv4 address'}
               </Text>
             </View>
             <View style={styles.propRow}>
               <Text style={[styles.propKey, { color: theme.textTertiary }]}>IPv4 Gateway:</Text>
               <Text style={[styles.propValMono, { color: theme.textPrimary }]}>
-                {activeAdapter.gateways.join(', ') || 'None'}
+                {(activeAdapter.gateways && activeAdapter.gateways.length > 0)
+                  ? activeAdapter.gateways.join(', ')
+                  : 'None'}
               </Text>
             </View>
-            {activeAdapter.ipv6Addresses.length > 0 && (
+            {activeAdapter.ipv6Addresses && activeAdapter.ipv6Addresses.length > 0 && (
               <View style={styles.propRow}>
                 <Text style={[styles.propKey, { color: theme.textTertiary }]}>IPv6 Address:</Text>
                 <Text style={[styles.propValMono, { color: theme.textPrimary }]}>

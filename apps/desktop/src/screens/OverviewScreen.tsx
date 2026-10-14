@@ -155,13 +155,13 @@ export const OverviewScreen: React.FC = () => {
                 <View style={styles.detailRow}>
                   <Text style={[styles.detailKey, { color: theme.textTertiary }]}>IPv4 Address:</Text>
                   <Text style={[styles.detailVal, { color: theme.textPrimary }]}>
-                    {adapter.ipv4Addresses[0] || 'Unassigned'}
+                    {adapter.ipv4Addresses?.[0] || 'Unassigned'}
                   </Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={[styles.detailKey, { color: theme.textTertiary }]}>Gateway:</Text>
                   <Text style={[styles.detailVal, { color: theme.textPrimary }]}>
-                    {adapter.gateways[0] || 'None'}
+                    {adapter.gateways?.[0] || 'None'}
                   </Text>
                 </View>
                 <View style={styles.detailRow}>

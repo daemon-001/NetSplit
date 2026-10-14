@@ -397,6 +397,20 @@ std::string IpcServer::HandleListAdapter(const std::string& reqId) {
         for (size_t j = 0; j < a.gateways.size(); ++j) {
             ss << "\"" << JsonEscape(a.gateways[j]) << "\"" << (j + 1 < a.gateways.size() ? "," : "");
         }
+        ss << "],";
+
+        // IPv6 array
+        ss << "\"ipv6Addresses\":[";
+        for (size_t j = 0; j < a.ipv6Addresses.size(); ++j) {
+            ss << "\"" << JsonEscape(a.ipv6Addresses[j]) << "\"" << (j + 1 < a.ipv6Addresses.size() ? "," : "");
+        }
+        ss << "],";
+
+        // DNS Servers array
+        ss << "\"dnsServers\":[";
+        for (size_t j = 0; j < a.dnsServers.size(); ++j) {
+            ss << "\"" << JsonEscape(a.dnsServers[j]) << "\"" << (j + 1 < a.dnsServers.size() ? "," : "");
+        }
         ss << "]";
 
         ss << "}" << (i + 1 < adapters.size() ? "," : "");

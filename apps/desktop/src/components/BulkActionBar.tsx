@@ -89,7 +89,7 @@ export const BulkActionBar: React.FC = () => {
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={[styles.adapterName, { color: theme.textPrimary }]}>{a.friendlyName}</Text>
                   <Text style={[styles.adapterMeta, { color: theme.textTertiary }]}>
-                    {a.type} • {a.status} • {a.ipv4Addresses[0] || 'No IP'}
+                    {a.type} • {a.status} • {a.ipv4Addresses?.[0] || 'No IP'}
                   </Text>
                 </View>
               </TouchableOpacity>

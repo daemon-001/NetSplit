@@ -61,7 +61,7 @@ void AdapterManager::Refresh() {
     PIP_ADAPTER_ADDRESSES pAddresses = (IP_ADAPTER_ADDRESSES*)malloc(outBufLen);
     if (!pAddresses) return;
 
-    ULONG flags = GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS | GAA_FLAG_INCLUDE_ALL_INTERFACES;
+    ULONG flags = GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
     DWORD dwRetVal = GetAdaptersAddresses(AF_UNSPEC, flags, NULL, pAddresses, &outBufLen);
     if (dwRetVal == ERROR_BUFFER_OVERFLOW) {
         free(pAddresses);
@@ -79,10 +79,44 @@ void AdapterManager::Refresh() {
 
     if (dwRetVal == NO_ERROR) {
         for (PIP_ADAPTER_ADDRESSES pCurr = pAddresses; pCurr != NULL; pCurr = pCurr->Next) {
+            // Skip loopback and tunnel interfaces
+            if (pCurr->IfType == IF_TYPE_SOFTWARE_LOOPBACK || pCurr->IfType == IF_TYPE_TUNNEL) {
+                continue;
+            }
+
+            // Skip internal filter and non-routable interface types
+            if (pCurr->IfType == 1 || pCurr->IfType == 243 || pCurr->IfType == 244) {
+                continue;
+            }
+
+            std::wstring desc = pCurr->Description ? pCurr->Description : L"";
+            std::wstring name = pCurr->FriendlyName ? pCurr->FriendlyName : L"";
+
+            auto toLowerW = [](std::wstring s) {
+                for (auto& c : s) c = towlower(c);
+                return s;
+            };
+            std::wstring lDesc = toLowerW(desc);
+            std::wstring lName = toLowerW(name);
+
+            // Filter out NDIS filters, QoS packet schedulers, kernel debuggers, Wi-Fi Direct, and virtual miniports
+            if (lDesc.find(L"filter") != std::wstring::npos ||
+                lDesc.find(L"packet scheduler") != std::wstring::npos ||
+                lDesc.find(L"lightweight") != std::wstring::npos ||
+                lDesc.find(L"kernel debugger") != std::wstring::npos ||
+                lDesc.find(L"qos") != std::wstring::npos ||
+                lDesc.find(L"wfp") != std::wstring::npos ||
+                lDesc.find(L"pseudo-interface") != std::wstring::npos ||
+                lDesc.find(L"wi-fi direct") != std::wstring::npos ||
+                lName.find(L"filter") != std::wstring::npos ||
+                lName.find(L"packet scheduler") != std::wstring::npos) {
+                continue;
+            }
+
             NetAdapterRecord record;
             record.id = pCurr->AdapterName ? pCurr->AdapterName : "";
-            record.friendlyName = pCurr->FriendlyName ? pCurr->FriendlyName : L"";
-            record.description = pCurr->Description ? pCurr->Description : L"";
+            record.friendlyName = name;
+            record.description = desc;
             record.ifIndex = pCurr->IfIndex;
             record.ipv6IfIndex = pCurr->Ipv6IfIndex;
             record.macAddress = FormatMacAddress(pCurr->PhysicalAddress, pCurr->PhysicalAddressLength);
@@ -179,6 +213,16 @@ void AdapterManager::Refresh() {
 
             m_adapters.push_back(record);
         }
+
+        // Sort adapters: Default Internet connection first, then active adapters with IPv4, then others
+        std::sort(m_adapters.begin(), m_adapters.end(), [](const NetAdapterRecord& a, const NetAdapterRecord& b) {
+            if (a.isDefaultRoute != b.isDefaultRoute) return a.isDefaultRoute > b.isDefaultRoute;
+            bool aHasIp = !a.ipv4Addresses.empty() && a.status == "UP";
+            bool bHasIp = !b.ipv4Addresses.empty() && b.status == "UP";
+            if (aHasIp != bHasIp) return aHasIp > bHasIp;
+            if ((a.status == "UP") != (b.status == "UP")) return (a.status == "UP") > (b.status == "UP");
+            return a.friendlyName < b.friendlyName;
+        });
     }
 
     free(pAddresses);

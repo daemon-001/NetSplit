@@ -132,17 +132,27 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
                   </View>
 
                   <View style={{ flex: 1, marginLeft: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={[styles.optionName, { color: theme.textPrimary }]}>{a.friendlyName}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Text style={[styles.optionName, { color: theme.textPrimary, flex: 1 }]} numberOfLines={1}>
+                        {a.friendlyName}
+                      </Text>
+                      {a.isDefaultRoute && (
+                        <View style={{ backgroundColor: theme.accentSubtle, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, marginLeft: 4 }}>
+                          <Text style={{ fontSize: 9, color: theme.accent, fontWeight: 'bold' }}>DEFAULT</Text>
+                        </View>
+                      )}
                       <View
                         style={[
                           styles.statusDot,
-                          { backgroundColor: isUp ? theme.success : theme.error },
+                          { backgroundColor: isUp ? theme.success : theme.error, marginLeft: 6 },
                         ]}
                       />
                     </View>
-                    <Text style={[styles.optionSub, { color: theme.textTertiary }]}>
-                      {a.ipv4Addresses.length > 0 ? a.ipv4Addresses[0] : 'No IPv4'} • {a.status}
+                    <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
+                      {a.description}
+                    </Text>
+                    <Text style={[styles.optionSub, { color: isUp ? theme.textSecondary : theme.textTertiary, fontSize: 10 }]}>
+                      {(a.ipv4Addresses && a.ipv4Addresses.length > 0) ? a.ipv4Addresses[0] : 'No IPv4'} • {a.type} • {a.status}
                     </Text>
                   </View>
 
