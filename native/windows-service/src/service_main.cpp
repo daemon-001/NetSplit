@@ -5,6 +5,7 @@
 #include "assignment_manager.hpp"
 #include "wfp_routing_engine.hpp"
 #include "ipc_server.hpp"
+#include <shellapi.h>
 
 #define SERVICE_NAME L"NetSplitService"
 #define SERVICE_DISPLAY_NAME L"NetSplit Network Routing Service"
@@ -22,19 +23,52 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
     return FALSE;
 }
 
+static std::string WStringToString(const std::wstring& wstr) {
+    if (wstr.empty()) return "";
+    int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string str(size, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), (int)wstr.size(), &str[0], size, NULL, NULL);
+    return str;
+}
+
+static std::wstring StringToWString(const std::string& str) {
+    if (str.empty()) return L"";
+    int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), NULL, 0);
+    std::wstring wstr(size, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), (int)str.size(), &wstr[0], size);
+    return wstr;
+}
+
 static std::string GetAppDataFolder() {
     wchar_t path[MAX_PATH];
     if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, path))) {
         std::wstring wpath = path;
         wpath += L"\\NetSplit";
         CreateDirectoryW(wpath.c_str(), NULL);
-        int size = WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), (int)wpath.size(), NULL, 0, NULL, NULL);
-        std::string str(size, 0);
-        WideCharToMultiByte(CP_UTF8, 0, wpath.c_str(), (int)wpath.size(), &str[0], size, NULL, NULL);
-        return str;
+        return WStringToString(wpath);
+    }
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, path))) {
+        std::wstring wpath = path;
+        wpath += L"\\NetSplit";
+        CreateDirectoryW(wpath.c_str(), NULL);
+        return WStringToString(wpath);
     }
     CreateDirectoryW(L".\\data", NULL);
     return ".\\data";
+}
+
+static bool CheckElevation() {
+    BOOL isElevated = FALSE;
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        TOKEN_ELEVATION elevation;
+        DWORD cbSize = sizeof(TOKEN_ELEVATION);
+        if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
+            isElevated = elevation.TokenIsElevated;
+        }
+        CloseHandle(hToken);
+    }
+    return isElevated != 0;
 }
 
 static void EnableDebugPrivilege() {
@@ -238,6 +272,22 @@ int main(int argc, char* argv[]) {
                 { NULL, NULL }
             };
             StartServiceCtrlDispatcherW(serviceTable);
+            return 0;
+        }
+    }
+
+    // Auto-elevate when launched with --elevate flag if not already elevated
+    if (argc > 1 && std::string(argv[1]) == "--elevate" && !CheckElevation()) {
+        wchar_t exePath[MAX_PATH];
+        GetModuleFileNameW(NULL, exePath, MAX_PATH);
+
+        std::wstring params = L"--background";
+        SHELLEXECUTEINFOW sei = { sizeof(sei) };
+        sei.lpVerb = L"runas";
+        sei.lpFile = exePath;
+        sei.lpParameters = params.c_str();
+        sei.nShow = SW_HIDE;
+        if (ShellExecuteExW(&sei)) {
             return 0;
         }
     }

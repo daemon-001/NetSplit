@@ -52,6 +52,100 @@ std::string AssignmentManager::GetCurrentIsoTimestamp() {
     return std::string(buf);
 }
 
+static std::string ExtractJsonStr(const std::string& obj, const std::string& key) {
+    size_t k = obj.find("\"" + key + "\"");
+    if (k == std::string::npos) return "";
+    size_t colon = obj.find(':', k);
+    if (colon == std::string::npos) return "";
+    size_t vStart = obj.find('"', colon);
+    if (vStart == std::string::npos) return "";
+    size_t vEnd = vStart + 1;
+    while (vEnd < obj.size()) {
+        if (obj[vEnd] == '"' && obj[vEnd - 1] != '\\') {
+            break;
+        }
+        vEnd++;
+    }
+    if (vEnd >= obj.size()) return "";
+    return obj.substr(vStart + 1, vEnd - vStart - 1);
+}
+
+static bool ExtractJsonBoolVal(const std::string& obj, const std::string& key, bool def) {
+    size_t k = obj.find("\"" + key + "\"");
+    if (k == std::string::npos) return def;
+    size_t colon = obj.find(':', k);
+    if (colon == std::string::npos) return def;
+    size_t truePos = obj.find("true", colon);
+    size_t falsePos = obj.find("false", colon);
+    size_t commaPos = obj.find(',', colon);
+    size_t bracePos = obj.find('}', colon);
+    size_t endPos = (commaPos < bracePos) ? commaPos : bracePos;
+
+    if (truePos != std::string::npos && (endPos == std::string::npos || truePos < endPos)) return true;
+    if (falsePos != std::string::npos && (endPos == std::string::npos || falsePos < endPos)) return false;
+    return def;
+}
+
+static std::vector<std::string> ExtractObjectsFromArray(const std::string& json, const std::string& arrayKey) {
+    std::vector<std::string> results;
+    size_t k = json.find("\"" + arrayKey + "\"");
+    if (k == std::string::npos) return results;
+
+    size_t arrStart = json.find('[', k);
+    if (arrStart == std::string::npos) return results;
+
+    bool inString = false;
+    bool escape = false;
+    int braceDepth = 0;
+    size_t itemStart = std::string::npos;
+
+    for (size_t i = arrStart + 1; i < json.size(); ++i) {
+        char c = json[i];
+        if (inString) {
+            if (escape) {
+                escape = false;
+            } else if (c == '\\') {
+                escape = true;
+            } else if (c == '"') {
+                inString = false;
+            }
+        } else {
+            if (c == '"') {
+                inString = true;
+            } else if (c == '{') {
+                if (braceDepth == 0) itemStart = i;
+                braceDepth++;
+            } else if (c == '}') {
+                braceDepth--;
+                if (braceDepth == 0 && itemStart != std::string::npos) {
+                    results.push_back(json.substr(itemStart, i - itemStart + 1));
+                    itemStart = std::string::npos;
+                }
+            } else if (c == ']' && braceDepth == 0) {
+                break;
+            }
+        }
+    }
+    return results;
+}
+
+static void UpdateWindowsStartupRegistry(bool enable) {
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
+        if (enable) {
+            wchar_t exePath[MAX_PATH];
+            GetModuleFileNameW(NULL, exePath, MAX_PATH);
+            std::wstring cmd = L"\"";
+            cmd += exePath;
+            cmd += L"\" --background";
+            RegSetValueExW(hKey, L"NetSplitService", 0, REG_SZ, (const BYTE*)cmd.c_str(), (DWORD)((cmd.size() + 1) * sizeof(wchar_t)));
+        } else {
+            RegDeleteValueW(hKey, L"NetSplitService");
+        }
+        RegCloseKey(hKey);
+    }
+}
+
 AssignmentManager::AssignmentManager(const std::string& configFilePath)
     : m_configPath(configFilePath) {}
 
@@ -63,71 +157,92 @@ bool AssignmentManager::Load() {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     std::ifstream file(m_configPath);
     if (!file.is_open()) {
+        wchar_t commonPath[MAX_PATH];
+        if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, commonPath))) {
+            std::wstring wCommonFile = std::wstring(commonPath) + L"\\NetSplit\\config.json";
+            file.open(WStringToString(wCommonFile));
+        }
+    }
+    if (!file.is_open()) {
         return false;
     }
 
     std::stringstream buffer;
     buffer << file.rdbuf();
     std::string content = buffer.str();
+    file.close();
 
-    // Basic JSON parser for assignments
-    // Look for rules array and global config
-    size_t rulesPos = content.find("\"rules\"");
-    if (rulesPos != std::string::npos) {
-        size_t arrayStart = content.find('[', rulesPos);
-        size_t arrayEnd = content.find(']', arrayStart);
-        if (arrayStart != std::string::npos && arrayEnd != std::string::npos) {
-            std::string rulesStr = content.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
-            size_t objStart = 0;
-            while ((objStart = rulesStr.find('{', objStart)) != std::string::npos) {
-                size_t objEnd = rulesStr.find('}', objStart);
-                if (objEnd == std::string::npos) break;
-                std::string obj = rulesStr.substr(objStart, objEnd - objStart + 1);
-
-                auto extractString = [&](const std::string& key) -> std::string {
-                    size_t k = obj.find("\"" + key + "\"");
-                    if (k == std::string::npos) return "";
-                    size_t colon = obj.find(':', k);
-                    if (colon == std::string::npos) return "";
-                    size_t vStart = obj.find('"', colon);
-                    if (vStart == std::string::npos) return "";
-                    size_t vEnd = obj.find('"', vStart + 1);
-                    if (vEnd == std::string::npos) return "";
-                    return obj.substr(vStart + 1, vEnd - vStart - 1);
-                };
-
-                auto extractBool = [&](const std::string& key, bool def) -> bool {
-                    size_t k = obj.find("\"" + key + "\"");
-                    if (k == std::string::npos) return def;
-                    size_t colon = obj.find(':', k);
-                    if (colon == std::string::npos) return def;
-                    if (obj.find("true", colon) < obj.find(',', colon)) return true;
-                    if (obj.find("false", colon) < obj.find(',', colon)) return false;
-                    return def;
-                };
-
-                AssignmentRule rule;
-                rule.id = extractString("id");
-                rule.applicationId = extractString("applicationId");
-                rule.applicationName = StringToWString(extractString("applicationName"));
-                rule.executablePath = StringToWString(extractString("executablePath"));
-                rule.adapterId = extractString("adapterId");
-                rule.adapterName = StringToWString(extractString("adapterName"));
-                rule.enabled = extractBool("enabled", true);
-                rule.fallbackMode = extractString("fallbackMode");
-                if (rule.fallbackMode.empty()) rule.fallbackMode = "BLOCK";
-                rule.status = "UNVERIFIED";
-                rule.createdAt = extractString("createdAt");
-                rule.updatedAt = extractString("updatedAt");
-
-                if (!rule.applicationId.empty() && !rule.adapterId.empty()) {
-                    m_rulesByAppId[rule.applicationId] = rule;
+    // 1. Load global config
+    size_t cfgPos = content.find("\"config\"");
+    if (cfgPos != std::string::npos) {
+        size_t cfgObjStart = content.find('{', cfgPos);
+        if (cfgObjStart != std::string::npos) {
+            bool inStr = false, esc = false;
+            int depth = 0;
+            size_t cfgObjEnd = std::string::npos;
+            for (size_t i = cfgObjStart; i < content.size(); ++i) {
+                char c = content[i];
+                if (inStr) {
+                    if (esc) esc = false;
+                    else if (c == '\\') esc = true;
+                    else if (c == '"') inStr = false;
+                } else {
+                    if (c == '"') inStr = true;
+                    else if (c == '{') depth++;
+                    else if (c == '}') {
+                        depth--;
+                        if (depth == 0) {
+                            cfgObjEnd = i;
+                            break;
+                        }
+                    }
                 }
-                objStart = objEnd + 1;
+            }
+
+            if (cfgObjEnd != std::string::npos) {
+                std::string cfgStr = content.substr(cfgObjStart, cfgObjEnd - cfgObjStart + 1);
+                std::string drp = ExtractJsonStr(cfgStr, "defaultRoutingPolicy");
+                if (!drp.empty()) m_config.defaultRoutingPolicy = drp;
+
+                std::string daId = ExtractJsonStr(cfgStr, "defaultAdapterId");
+                if (!daId.empty()) m_config.defaultAdapterId = daId;
+
+                std::string adb = ExtractJsonStr(cfgStr, "adapterDisconnectBehavior");
+                if (!adb.empty()) m_config.adapterDisconnectBehavior = adb;
+
+                std::string tm = ExtractJsonStr(cfgStr, "themeMode");
+                if (!tm.empty()) m_config.themeMode = tm;
+
+                m_config.startWithWindows = ExtractJsonBoolVal(cfgStr, "startWithWindows", m_config.startWithWindows);
+                m_config.minimizeToTray = ExtractJsonBoolVal(cfgStr, "minimizeToTray", m_config.minimizeToTray);
+                m_config.enableAuditLogging = ExtractJsonBoolVal(cfgStr, "enableAuditLogging", m_config.enableAuditLogging);
             }
         }
     }
 
+    // 2. Load rules (quote-aware, GUID safe)
+    std::vector<std::string> ruleObjs = ExtractObjectsFromArray(content, "rules");
+    for (const auto& obj : ruleObjs) {
+        AssignmentRule rule;
+        rule.id = ExtractJsonStr(obj, "id");
+        rule.applicationId = ExtractJsonStr(obj, "applicationId");
+        rule.applicationName = StringToWString(ExtractJsonStr(obj, "applicationName"));
+        rule.executablePath = StringToWString(ExtractJsonStr(obj, "executablePath"));
+        rule.adapterId = ExtractJsonStr(obj, "adapterId");
+        rule.adapterName = StringToWString(ExtractJsonStr(obj, "adapterName"));
+        rule.enabled = ExtractJsonBoolVal(obj, "enabled", true);
+        rule.fallbackMode = ExtractJsonStr(obj, "fallbackMode");
+        if (rule.fallbackMode.empty()) rule.fallbackMode = "BLOCK";
+        rule.status = "UNVERIFIED";
+        rule.createdAt = ExtractJsonStr(obj, "createdAt");
+        rule.updatedAt = ExtractJsonStr(obj, "updatedAt");
+
+        if (!rule.applicationId.empty() && !rule.adapterId.empty()) {
+            m_rulesByAppId[rule.applicationId] = rule;
+        }
+    }
+
+    UpdateWindowsStartupRegistry(m_config.startWithWindows);
     return true;
 }
 
@@ -186,7 +301,18 @@ bool AssignmentManager::Save() {
     // Atomic rename
     std::wstring wtmp = StringToWString(tmpPath);
     std::wstring wdst = StringToWString(m_configPath);
-    return MoveFileExW(wtmp.c_str(), wdst.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+    bool ok = MoveFileExW(wtmp.c_str(), wdst.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+
+    // Also mirror to ProgramData if accessible so service has access when running as system service
+    wchar_t commonPath[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, commonPath))) {
+        std::wstring wCommonDir = std::wstring(commonPath) + L"\\NetSplit";
+        CreateDirectoryW(wCommonDir.c_str(), NULL);
+        std::wstring wCommonFile = wCommonDir + L"\\config.json";
+        CopyFileW(wdst.c_str(), wCommonFile.c_str(), FALSE);
+    }
+
+    return ok;
 }
 
 bool AssignmentManager::SetAssignment(const std::string& applicationId,
@@ -324,5 +450,6 @@ GlobalConfig AssignmentManager::GetGlobalConfig() {
 void AssignmentManager::SetGlobalConfig(const GlobalConfig& config) {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_config = config;
+    UpdateWindowsStartupRegistry(m_config.startWithWindows);
     Save();
 }

@@ -92,6 +92,51 @@ static bool ExtractJsonBool(const std::string& json, const std::string& key, boo
     return def;
 }
 
+static std::vector<std::string> ExtractJsonObjectsFromArray(const std::string& json, const std::string& arrayKey) {
+    std::vector<std::string> results;
+    size_t k = json.find("\"" + arrayKey + "\"");
+    if (k == std::string::npos) return results;
+
+    size_t arrStart = json.find('[', k);
+    if (arrStart == std::string::npos) return results;
+
+    bool inString = false;
+    bool escape = false;
+    int braceDepth = 0;
+    size_t itemStart = std::string::npos;
+
+    for (size_t i = arrStart + 1; i < json.size(); ++i) {
+        char c = json[i];
+        if (inString) {
+            if (escape) {
+                escape = false;
+            } else if (c == '\\') {
+                escape = true;
+            } else if (c == '"') {
+                inString = false;
+            }
+        } else {
+            if (c == '"') {
+                inString = true;
+            } else if (c == '{') {
+                if (braceDepth == 0) {
+                    itemStart = i;
+                }
+                braceDepth++;
+            } else if (c == '}') {
+                braceDepth--;
+                if (braceDepth == 0 && itemStart != std::string::npos) {
+                    results.push_back(json.substr(itemStart, i - itemStart + 1));
+                    itemStart = std::string::npos;
+                }
+            } else if (c == ']' && braceDepth == 0) {
+                break;
+            }
+        }
+    }
+    return results;
+}
+
 static bool IsProcessElevated() {
     BOOL isElevated = FALSE;
     HANDLE hToken = NULL;
@@ -99,7 +144,27 @@ static bool IsProcessElevated() {
         TOKEN_ELEVATION elevation;
         DWORD cbSize = sizeof(TOKEN_ELEVATION);
         if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
-            isElevated = elevation.TokenIsElevated;
+            isElevated = elevation.TokenIsElevated != 0;
+        }
+
+        if (!isElevated) {
+            BYTE adminSid[SECURITY_MAX_SID_SIZE];
+            DWORD sidSize = sizeof(adminSid);
+            if (CreateWellKnownSid(WinBuiltinAdministratorsSid, NULL, adminSid, &sidSize)) {
+                BOOL isMember = FALSE;
+                if (CheckTokenMembership(NULL, adminSid, &isMember) && isMember) {
+                    isElevated = TRUE;
+                }
+            }
+
+            BYTE systemSid[SECURITY_MAX_SID_SIZE];
+            sidSize = sizeof(systemSid);
+            if (!isElevated && CreateWellKnownSid(WinLocalSystemSid, NULL, systemSid, &sidSize)) {
+                BOOL isMember = FALSE;
+                if (CheckTokenMembership(NULL, systemSid, &isMember) && isMember) {
+                    isElevated = TRUE;
+                }
+            }
         }
         CloseHandle(hToken);
     }
@@ -145,6 +210,37 @@ void IpcServer::GenerateAndSaveToken() {
         tokenFile << m_authToken;
         tokenFile.close();
     }
+
+    // Mirror token to LOCALAPPDATA so user apps and tests can read it
+    wchar_t localPath[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, localPath))) {
+        std::wstring wLocal = std::wstring(localPath) + L"\\NetSplit";
+        CreateDirectoryW(wLocal.c_str(), NULL);
+        std::string localTokenFile = WStringToString(wLocal + L"\\ipc_auth.token");
+        if (localTokenFile != m_tokenFilePath) {
+            std::ofstream lFile(localTokenFile);
+            if (lFile.is_open()) {
+                lFile << m_authToken;
+                lFile.close();
+            }
+        }
+    }
+
+    // Mirror token to COMMON_APPDATA (ProgramData)
+    wchar_t commonPath[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, commonPath))) {
+        std::wstring wCommon = std::wstring(commonPath) + L"\\NetSplit";
+        CreateDirectoryW(wCommon.c_str(), NULL);
+        std::string commonTokenFile = WStringToString(wCommon + L"\\ipc_auth.token");
+        if (commonTokenFile != m_tokenFilePath) {
+            std::ofstream cFile(commonTokenFile);
+            if (cFile.is_open()) {
+                cFile << m_authToken;
+                cFile.close();
+            }
+        }
+    }
+
     printf("[IPC Server] Ephemeral token saved to: %s\n", m_tokenFilePath.c_str());
 }
 
@@ -567,29 +663,29 @@ std::string IpcServer::HandleAssignRule(const std::string& reqId, const std::str
 }
 
 std::string IpcServer::HandleBulkAssign(const std::string& reqId, const std::string& body) {
-    // Process array of assignments
-    size_t assignPos = body.find("\"assignments\"");
-    if (assignPos == std::string::npos) {
-        return "{\"jsonrpc\":\"2.0\",\"id\":\"" + reqId + "\",\"error\":{\"code\":-32602,\"message\":\"assignments array is required\"}}";
+    std::vector<std::string> items = ExtractJsonObjectsFromArray(body, "assignments");
+    if (items.empty()) {
+        return "{\"jsonrpc\":\"2.0\",\"id\":\"" + reqId + "\",\"error\":{\"code\":-32602,\"message\":\"assignments array is required and cannot be empty\"}}";
     }
 
     std::vector<std::string> succeeded;
     std::vector<std::pair<std::string, std::string>> failed;
 
-    // Iterate through items
-    size_t start = body.find('{', assignPos);
-    while (start != std::string::npos) {
-        size_t end = body.find('}', start);
-        if (end == std::string::npos) break;
-        std::string item = body.substr(start, end - start + 1);
-
+    for (const auto& item : items) {
         std::string appId = ExtractJsonValue(item, "applicationId");
         std::string adapterId = ExtractJsonValue(item, "adapterId");
         std::string exePath = ExtractJsonValue(item, "executablePath");
         std::string appName = ExtractJsonValue(item, "applicationName");
+        std::string fallbackMode = ExtractJsonValue(item, "fallbackMode");
+        if (fallbackMode.empty()) fallbackMode = "BLOCK";
 
         if (!appId.empty() && !adapterId.empty()) {
             DiscoveredApp* pApp = m_pAppMgr->FindAppById(appId);
+            if (!pApp && !exePath.empty()) {
+                m_pAppMgr->AddManualExecutable(StringToWString(exePath), StringToWString(appName));
+                pApp = m_pAppMgr->FindAppById(appId);
+            }
+
             std::wstring wAppName = pApp ? pApp->name : StringToWString(appName);
             std::wstring wExePath = pApp ? pApp->executablePath : StringToWString(exePath);
             NetAdapterRecord* pAdapter = m_pAdapterMgr->FindAdapterById(adapterId);
@@ -597,16 +693,22 @@ std::string IpcServer::HandleBulkAssign(const std::string& reqId, const std::str
 
             AssignmentRule rule;
             std::string err;
-            if (m_pAssignMgr->SetAssignment(appId, wAppName, wExePath, adapterId, wAdapterName, "BLOCK", rule, err)) {
+            if (m_pAssignMgr->SetAssignment(appId, wAppName, wExePath, adapterId, wAdapterName, fallbackMode, rule, err)) {
                 std::string applyErr;
-                m_pRoutingEngine->ApplyRule(rule, applyErr);
-                m_pAssignMgr->UpdateRuleStatus(rule.id, applyErr.empty() ? "ACTIVE" : "ERROR", applyErr);
+                if (m_pRoutingEngine->ApplyRule(rule, applyErr)) {
+                    m_pAssignMgr->UpdateRuleStatus(rule.id, "ACTIVE");
+                    LogActivity("SUCCESS", "RULE", "Routing Rule Activated", WStringToString(wAppName) + " -> " + WStringToString(wAdapterName));
+                } else {
+                    m_pAssignMgr->UpdateRuleStatus(rule.id, "ERROR", applyErr);
+                    LogActivity("ERROR", "RULE", "Routing Rule Enforcement Failed", applyErr);
+                }
                 succeeded.push_back(appId);
             } else {
                 failed.push_back({appId, err});
             }
+        } else {
+            failed.push_back({appId.empty() ? "unknown" : appId, "Missing applicationId or adapterId"});
         }
-        start = body.find('{', end + 1);
     }
 
     std::ostringstream ss;

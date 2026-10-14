@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { WifiIcon, EthernetIcon } from './Icons';
+import { StatusBadge } from './StatusBadge';
 
 export const BulkActionBar: React.FC = () => {
   const [showAdapterPicker, setShowAdapterPicker] = useState(false);
@@ -11,6 +12,7 @@ export const BulkActionBar: React.FC = () => {
   const selectedAppIds = useNetSplitStore((state) => state.selectedAppIds);
   const clearSelection = useNetSplitStore((state) => state.clearSelection);
   const adapters = useNetSplitStore((state) => state.adapters);
+  const settings = useNetSplitStore((state) => state.settings);
   const bulkAssign = useNetSplitStore((state) => state.bulkAssign);
   const bulkUnassign = useNetSplitStore((state) => state.bulkUnassign);
 
@@ -68,32 +70,99 @@ export const BulkActionBar: React.FC = () => {
           activeOpacity={1}
           onPress={() => setShowAdapterPicker(false)}
         >
-          <View style={[styles.pickerModal, { backgroundColor: theme.surfaceCard, borderColor: theme.borderStrong }]}>
-            <Text style={[styles.pickerTitle, { color: theme.textPrimary }]}>
-              Assign {selectedAppIds.length} Application{selectedAppIds.length > 1 ? 's' : ''} to:
-            </Text>
-
-            {hardwareAdapters.map((a) => (
+          <View
+            style={[styles.pickerModal, { backgroundColor: theme.surfaceCard, borderColor: theme.borderStrong }]}
+            onStartShouldSetResponder={() => true}
+            onTouchEnd={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <View style={[styles.modalHeader, { borderBottomColor: theme.borderSubtle }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.pickerTitle, { color: theme.textPrimary }]}>
+                  Assign {selectedAppIds.length} Application{selectedAppIds.length > 1 ? 's' : ''} to:
+                </Text>
+                <Text style={[styles.pickerSubtitle, { color: theme.textTertiary }]}>
+                  Select network adapter for routed traffic
+                </Text>
+              </View>
               <TouchableOpacity
-                key={a.id}
-                style={[styles.adapterRow, { borderBottomColor: theme.borderSubtle }]}
-                onPress={() => handleBulkAssign(a.id)}
+                style={[styles.closeBtn, { backgroundColor: theme.surfaceHover, borderColor: theme.borderSubtle }]}
+                onPress={() => setShowAdapterPicker(false)}
               >
-                <View style={styles.iconBox}>
-                  {a.type === 'WIFI' ? (
-                    <WifiIcon size={16} color={theme.textPrimary} />
-                  ) : (
-                    <EthernetIcon size={16} color={theme.textPrimary} />
-                  )}
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={[styles.adapterName, { color: theme.textPrimary }]}>{a.friendlyName}</Text>
-                  <Text style={[styles.adapterMeta, { color: theme.textTertiary }]}>
-                    {a.type} • {a.status} • {a.ipv4Addresses?.[0] || 'No IP'}
-                  </Text>
-                </View>
+                <Text style={[styles.closeBtnText, { color: theme.textSecondary }]}>✕</Text>
               </TouchableOpacity>
-            ))}
+            </View>
+
+            {/* Adapters List with clear UP / DOWN Network Status */}
+            <ScrollView style={styles.adapterList} showsVerticalScrollIndicator={false}>
+              {hardwareAdapters.map((a) => {
+                const isUp = a.status === 'UP';
+                const isDefault =
+                  settings.defaultRoutingPolicy === 'PREFER_ADAPTER'
+                    ? settings.defaultAdapterId === a.id
+                    : a.isDefaultRoute;
+
+                return (
+                  <TouchableOpacity
+                    key={a.id}
+                    style={[
+                      styles.adapterRow,
+                      {
+                        borderBottomColor: theme.borderSubtle,
+                        backgroundColor: theme.surfaceCard,
+                      },
+                    ]}
+                    onPress={() => handleBulkAssign(a.id)}
+                  >
+                    <View
+                      style={[
+                        styles.iconBox,
+                        {
+                          backgroundColor: isUp
+                            ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5')
+                            : (themeMode === 'dark' ? 'rgba(239, 68, 68, 0.12)' : '#fef2f2'),
+                        },
+                      ]}
+                    >
+                      {a.type === 'WIFI' ? (
+                        <WifiIcon size={16} color={isUp ? (themeMode === 'dark' ? '#34d399' : '#059669') : theme.textTertiary} />
+                      ) : (
+                        <EthernetIcon size={16} color={isUp ? (themeMode === 'dark' ? '#34d399' : '#059669') : theme.textTertiary} />
+                      )}
+                    </View>
+
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={[styles.adapterName, { color: theme.textPrimary }]} numberOfLines={1}>
+                          {a.friendlyName}
+                        </Text>
+                        {isDefault && (
+                          <View
+                            style={{
+                              backgroundColor: theme.accentSubtle,
+                              paddingHorizontal: 5,
+                              paddingVertical: 1,
+                              borderRadius: 3,
+                              marginLeft: 6,
+                            }}
+                          >
+                            <Text style={{ fontSize: 9, color: theme.accent, fontWeight: '700' }}>DEFAULT</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
+                        {a.type} • {a.ipv4Addresses?.[0] || 'No IPv4'}
+                      </Text>
+                    </View>
+
+                    {/* Network Status Badge (UP / DOWN) */}
+                    <View style={styles.statusCol}>
+                      <StatusBadge status={a.status} size="sm" />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -183,35 +252,77 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickerModal: {
-    width: 360,
+    width: 440,
+    maxHeight: '80%',
     borderRadius: radii.md,
     borderWidth: 1,
-    padding: spacing.md,
+    padding: spacing.lg,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    marginBottom: spacing.xs,
   },
   pickerTitle: {
     fontFamily: typography.fontFamily,
     fontSize: typography.sizes.sm,
-    fontWeight: typography.weights.semibold,
-    marginBottom: spacing.md,
+    fontWeight: typography.weights.bold,
+  },
+  pickerSubtitle: {
+    fontFamily: typography.fontFamily,
+    fontSize: typography.sizes.xs,
+    marginTop: 2,
+  },
+  closeBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  closeBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 14,
+  },
+  adapterList: {
+    maxHeight: 340,
   },
   adapterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
   },
   iconBox: {
-    width: 24,
+    width: 34,
+    height: 34,
+    borderRadius: 6,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   adapterName: {
     fontFamily: typography.fontFamily,
     fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.medium,
+    fontWeight: typography.weights.semibold,
   },
   adapterMeta: {
     fontFamily: typography.fontFamily,
     fontSize: 10,
-    marginTop: 1,
+    marginTop: 2,
+  },
+  statusCol: {
+    marginLeft: 10,
+    alignItems: 'flex-end',
   },
 });

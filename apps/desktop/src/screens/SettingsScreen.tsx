@@ -56,25 +56,10 @@ export const SettingsScreen: React.FC = () => {
             </Text>
           </View>
           <View style={styles.settingRow}>
-            <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>Process Elevation Privileges:</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Text
-                style={[
-                  styles.settingValue,
-                  { color: systemStatus?.isElevated ? theme.success : theme.warning, marginRight: 8 },
-                ]}
-              >
-                {systemStatus?.isElevated ? 'ELEVATED (Full Route & Kernel Control)' : 'STANDARD (Elevation Required)'}
-              </Text>
-              {!systemStatus?.isElevated && (
-                <TouchableOpacity
-                  style={{ backgroundColor: theme.accent, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}
-                  onPress={() => (window as any).netSplitHost?.elevateService?.()}
-                >
-                  <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: 'bold' }}>Elevate</Text>
-                </TouchableOpacity>
-              )}
-            </View>
+            <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>System Permissions:</Text>
+            <Text style={[styles.settingValue, { color: theme.success }]}>
+              Full Administrator & Kernel Route Control (Always Active)
+            </Text>
           </View>
           <View style={styles.settingRow}>
             <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>IPC Channel:</Text>

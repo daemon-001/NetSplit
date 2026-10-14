@@ -213,8 +213,23 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
         failed: result.failed.length,
       };
     } catch (err: unknown) {
-      set({ lastError: String(err) });
-      return { succeeded: 0, failed: selectedAppIds.length };
+      console.warn('bulkAssign RPC failed, attempting sequential assignment fallback:', err);
+      let succeededCount = 0;
+      let failedCount = 0;
+      for (const item of assignments) {
+        try {
+          await defaultIpcClient.assignRule(item);
+          succeededCount++;
+        } catch {
+          failedCount++;
+        }
+      }
+      await get().refreshAll();
+      set({ selectedAppIds: [] });
+      if (failedCount > 0 && succeededCount === 0) {
+        set({ lastError: String(err) });
+      }
+      return { succeeded: succeededCount, failed: failedCount };
     }
   },
 

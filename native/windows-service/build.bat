@@ -47,6 +47,15 @@ if %ERRORLEVEL% neq 0 (
     copy /y native\windows-service\NetSplitRouter32.dll native\router\NetSplitRouter32.dll >nul 2>&1
 )
 
+REM Handle running service executable by moving it if locked
+if exist native\windows-service\NetSplitService.exe (
+    del /f /q native\windows-service\NetSplitService.exe >nul 2>&1
+    if exist native\windows-service\NetSplitService.exe (
+        del /f /q native\windows-service\NetSplitService.exe.old >nul 2>&1
+        move /y native\windows-service\NetSplitService.exe native\windows-service\NetSplitService.exe.old >nul 2>&1
+    )
+)
+
 echo [3/3] Compiling NetSplitService.exe x64...
 cl.exe /nologo /EHsc /O2 /W3 /std:c++17 ^
     native\windows-service\src\adapter_manager.cpp ^
