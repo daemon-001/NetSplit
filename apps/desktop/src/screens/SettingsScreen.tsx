@@ -56,6 +56,27 @@ export const SettingsScreen: React.FC = () => {
             </Text>
           </View>
           <View style={styles.settingRow}>
+            <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>Process Elevation Privileges:</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text
+                style={[
+                  styles.settingValue,
+                  { color: systemStatus?.isElevated ? theme.success : theme.warning, marginRight: 8 },
+                ]}
+              >
+                {systemStatus?.isElevated ? 'ELEVATED (Full Route & Kernel Control)' : 'STANDARD (Elevation Required)'}
+              </Text>
+              {!systemStatus?.isElevated && (
+                <TouchableOpacity
+                  style={{ backgroundColor: theme.accent, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}
+                  onPress={() => (window as any).netSplitHost?.elevateService?.()}
+                >
+                  <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: 'bold' }}>Elevate</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+          <View style={styles.settingRow}>
             <Text style={[styles.settingLabel, { color: theme.textSecondary }]}>IPC Channel:</Text>
             <Text style={[styles.settingValue, { color: theme.textPrimary }]}>
               Local Loopback WebSocket (127.0.0.1:48192, Ephemeral Token DACL)
@@ -271,6 +292,36 @@ export const SettingsScreen: React.FC = () => {
         </View>
       </View>
 
+      {/* Windows Service Permanent Installation Card */}
+      <View style={[styles.card, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
+        <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 6 }]}>
+          Windows Service Management
+        </Text>
+        <Text style={[styles.policyDesc, { color: theme.textSecondary, marginBottom: 12 }]}>
+          Installing NetSplit as a Windows Service allows it to run automatically on Windows boot under NT AUTHORITY\SYSTEM with full administrative privileges, eliminating UAC prompts and ensuring seamless network adapter metric and route enforcement.
+        </Text>
+
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <TouchableOpacity
+            style={[styles.installServiceBtn, { backgroundColor: theme.accent }]}
+            onPress={() => (window as any).netSplitHost?.installService?.()}
+          >
+            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
+              🛡️ Install as Windows Service
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.installServiceBtn, { backgroundColor: theme.surfaceHover, borderWidth: 1, borderColor: theme.border }]}
+            onPress={() => (window as any).netSplitHost?.elevateService?.()}
+          >
+            <Text style={{ color: theme.textPrimary, fontSize: 12 }}>
+              ⚡ Restart Service Elevated
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       {/* Uninstall and Clean Recovery Guidance */}
       <View style={[styles.card, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
         <Text style={[styles.cardTitle, { color: theme.textPrimary, marginBottom: 6 }]}>
@@ -408,5 +459,12 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamilyMono,
     fontSize: 9,
     fontWeight: typography.weights.bold,
+  },
+  installServiceBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

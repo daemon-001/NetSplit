@@ -40,12 +40,19 @@ function ensureServiceRunning() {
   if (fs.existsSync(serviceExe)) {
     console.log('[Electron] Ensuring NetSplitService is running in background:', serviceExe);
     try {
-      serviceProcess = spawn(serviceExe, ['--background'], {
-        detached: true,
-        windowsHide: true,
-        stdio: 'ignore',
+      const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
+      const { exec } = require('child_process');
+      exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`, (err) => {
+        if (err) {
+          console.warn('[Electron] Could not launch elevated service, falling back to standard spawn:', err.message);
+          serviceProcess = spawn(serviceExe, ['--background'], {
+            detached: true,
+            windowsHide: true,
+            stdio: 'ignore',
+          });
+          serviceProcess.unref();
+        }
       });
-      serviceProcess.unref();
     } catch (err) {
       console.warn('[Electron] Could not launch background service:', err.message);
     }
@@ -94,6 +101,24 @@ ipcMain.handle('get-token', async () => {
     await new Promise((r) => setTimeout(r, 600));
   }
   return null;
+});
+
+ipcMain.handle('elevate-service', async () => {
+  const serviceExe = getServicePath();
+  const { exec } = require('child_process');
+  exec('taskkill /F /IM NetSplitService.exe', () => {
+    const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
+    exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`);
+  });
+  return true;
+});
+
+ipcMain.handle('install-service', async () => {
+  const scriptPath = path.resolve(__dirname, '../../../scripts/install-service.ps1');
+  const { exec } = require('child_process');
+  const psCmd = `Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"${scriptPath}\"' -Verb RunAs`;
+  exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`);
+  return true;
 });
 
 app.whenReady().then(createWindow);

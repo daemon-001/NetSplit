@@ -272,6 +272,19 @@ bool AdapterManager::SetDefaultAdapter(const std::string& adapterId, std::string
                 SetIpInterfaceEntry(&row);
             }
         }
+
+        // Reset default routes in routing table
+        PMIB_IPFORWARD_TABLE2 pRouteTable = NULL;
+        if (GetIpForwardTable2(AF_INET, &pRouteTable) == NO_ERROR) {
+            for (ULONG i = 0; i < pRouteTable->NumEntries; ++i) {
+                MIB_IPFORWARD_ROW2& route = pRouteTable->Table[i];
+                if (route.DestinationPrefix.Prefix.Ipv4.sin_addr.s_addr == 0 && route.DestinationPrefix.PrefixLength == 0) {
+                    route.Metric = 0;
+                    SetIpForwardEntry2(&route);
+                }
+            }
+            FreeMibTable(pRouteTable);
+        }
         return true;
     }
 
@@ -302,8 +315,12 @@ bool AdapterManager::SetDefaultAdapter(const std::string& adapterId, std::string
             row.UseAutomaticMetric = FALSE;
             row.Metric = (a.ifIndex == targetIndex) ? 5 : 35;
             DWORD err = SetIpInterfaceEntry(&row);
-            if (a.ifIndex == targetIndex && err != NO_ERROR && err != ERROR_ACCESS_DENIED) {
-                outError = "SetIpInterfaceEntry IPv4 failed: " + std::to_string(err);
+            if (a.ifIndex == targetIndex && err != NO_ERROR) {
+                if (err == ERROR_ACCESS_DENIED) {
+                    outError = "Administrator privileges required to change Windows default adapter metric. Please run NetSplit as Administrator or install the Windows Service.";
+                } else {
+                    outError = "SetIpInterfaceEntry IPv4 failed: " + std::to_string(err);
+                }
                 return false;
             }
         }
@@ -317,6 +334,31 @@ bool AdapterManager::SetDefaultAdapter(const std::string& adapterId, std::string
             row.Metric = (a.ifIndex == targetIndex) ? 5 : 35;
             SetIpInterfaceEntry(&row);
         }
+    }
+
+    // Also update active default gateway routes in forwarding table
+    PMIB_IPFORWARD_TABLE2 pRouteTable = NULL;
+    if (GetIpForwardTable2(AF_INET, &pRouteTable) == NO_ERROR) {
+        for (ULONG i = 0; i < pRouteTable->NumEntries; ++i) {
+            MIB_IPFORWARD_ROW2& route = pRouteTable->Table[i];
+            if (route.DestinationPrefix.Prefix.Ipv4.sin_addr.s_addr == 0 && route.DestinationPrefix.PrefixLength == 0) {
+                route.Metric = (route.InterfaceIndex == targetIndex) ? 5 : 35;
+                SetIpForwardEntry2(&route);
+            }
+        }
+        FreeMibTable(pRouteTable);
+    }
+
+    pRouteTable = NULL;
+    if (GetIpForwardTable2(AF_INET6, &pRouteTable) == NO_ERROR) {
+        for (ULONG i = 0; i < pRouteTable->NumEntries; ++i) {
+            MIB_IPFORWARD_ROW2& route = pRouteTable->Table[i];
+            if (route.DestinationPrefix.PrefixLength == 0) {
+                route.Metric = (route.InterfaceIndex == targetIndex) ? 5 : 35;
+                SetIpForwardEntry2(&route);
+            }
+        }
+        FreeMibTable(pRouteTable);
     }
 
     return true;

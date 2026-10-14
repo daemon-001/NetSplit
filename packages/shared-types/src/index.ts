@@ -121,6 +121,7 @@ export interface SystemStatus {
   defaultAdapterId?: string;
   isDriverInstalled: boolean;
   driverVersion?: string;
+  isElevated?: boolean;
 }
 
 // JSON-RPC 2.0 Types

@@ -66,6 +66,20 @@ static bool ExtractJsonBool(const std::string& json, const std::string& key, boo
     return def;
 }
 
+static bool IsProcessElevated() {
+    BOOL isElevated = FALSE;
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        TOKEN_ELEVATION elevation;
+        DWORD cbSize = sizeof(TOKEN_ELEVATION);
+        if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &cbSize)) {
+            isElevated = elevation.TokenIsElevated;
+        }
+        CloseHandle(hToken);
+    }
+    return isElevated != 0;
+}
+
 IpcServer::IpcServer(int port,
                      const std::string& tokenFilePath,
                      AdapterManager* pAdapterMgr,
@@ -357,7 +371,8 @@ std::string IpcServer::HandleGetStatus(const std::string& reqId) {
     ss << "\"errorRulesCount\":" << errorRules << ",";
     ss << "\"defaultPolicy\":\"" << JsonEscape(cfg.defaultRoutingPolicy) << "\",";
     ss << "\"defaultAdapterId\":\"" << JsonEscape(cfg.defaultAdapterId) << "\",";
-    ss << "\"isDriverInstalled\":false";
+    ss << "\"isDriverInstalled\":false,";
+    ss << "\"isElevated\":" << (IsProcessElevated() ? "true" : "false");
     ss << "}}";
     return ss.str();
 }

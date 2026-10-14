@@ -70,6 +70,21 @@ export const App: React.FC = () => {
           </View>
         )}
 
+        {/* Unprivileged Warning Banner (if running without admin) */}
+        {serviceConnected && systemStatus && systemStatus.isElevated === false && (
+          <View style={[styles.elevationAlert, { backgroundColor: '#3b2505', borderBottomColor: '#f59e0b' }]}>
+            <Text style={[styles.elevationAlertText, { color: '#fbbf24' }]}>
+              ⚠️ NetSplit Service is running without Administrator privileges. Windows requires Administrator rights to change route metrics.
+            </Text>
+            <TouchableOpacity
+              style={[styles.elevateBtn, { backgroundColor: '#d97706' }]}
+              onPress={() => (window as any).netSplitHost?.elevateService?.()}
+            >
+              <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>🛡️ Run as Administrator</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Screen Content */}
         <View style={styles.screenHost}>
           {renderScreen()}
@@ -100,6 +115,26 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily,
     fontSize: typography.sizes.xs,
     fontWeight: typography.weights.medium,
+  },
+  elevationAlert: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  elevationAlertText: {
+    fontFamily: typography.fontFamily,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.medium,
+    flex: 1,
+    marginRight: 12,
+  },
+  elevateBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 4,
   },
   screenHost: {
     flex: 1,

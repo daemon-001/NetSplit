@@ -297,11 +297,16 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             defaultAdapterId: res.defaultAdapterId,
             defaultRoutingPolicy: res.defaultRoutingPolicy as any,
           },
+          lastError: null,
         }));
         await get().refreshAll();
       }
-    } catch (err: unknown) {
-      set({ lastError: String(err) });
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      set({ lastError: msg });
+      if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+        window.alert(msg);
+      }
     }
   },
 }));

@@ -213,16 +213,6 @@ bool UninstallService() {
 }
 
 int main(int argc, char* argv[]) {
-    // Ensure only one service instance runs at a time
-    HANDLE hSingleInstance = CreateMutexW(NULL, TRUE, L"Local\\NetSplitService_SingleInstance");
-    if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        printf("[NetSplit] Service instance is already running.\n");
-        if (hSingleInstance) CloseHandle(hSingleInstance);
-        return 0;
-    }
-
-    SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
-
     if (argc > 1) {
         std::string arg = argv[1];
         if (arg == "--install") {
@@ -236,7 +226,22 @@ int main(int argc, char* argv[]) {
             };
             StartServiceCtrlDispatcherW(serviceTable);
             return 0;
-        } else if (arg == "--background" || arg == "--hidden") {
+        }
+    }
+
+    // Ensure only one service daemon runs at a time
+    HANDLE hSingleInstance = CreateMutexW(NULL, TRUE, L"Local\\NetSplitService_SingleInstance");
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        printf("[NetSplit] Service instance is already running.\n");
+        if (hSingleInstance) CloseHandle(hSingleInstance);
+        return 0;
+    }
+
+    SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
+
+    if (argc > 1) {
+        std::string arg = argv[1];
+        if (arg == "--background" || arg == "--hidden") {
             HWND hWnd = GetConsoleWindow();
             if (hWnd) {
                 ShowWindow(hWnd, SW_HIDE);
@@ -244,7 +249,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Default: Run interactively
+    // Default: Run daemon
     RunDaemon(false);
     return 0;
 }
