@@ -1,7 +1,7 @@
 # NetSplit .gitignore
 
 # Dependencies
-node_modules/
+node_modules
 package-lock.json
 
 # C++ Build Artifacts
