@@ -213,6 +213,11 @@ int main(int argc, char* argv[]) {
             };
             StartServiceCtrlDispatcherW(serviceTable);
             return 0;
+        } else if (arg == "--background" || arg == "--hidden") {
+            HWND hWnd = GetConsoleWindow();
+            if (hWnd) {
+                ShowWindow(hWnd, SW_HIDE);
+            }
         }
     }
 

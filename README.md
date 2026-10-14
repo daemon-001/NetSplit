@@ -142,19 +142,30 @@ node --test tests/unit/*.test.js tests/integration/*.test.js
 ```
 *(Runs 16 automated tests covering assignment uniqueness, IPC protocol validation, and live service daemon lifecycle)*.
 
-### 3. Start Service Daemon
-```powershell
-# Interactive development mode:
-.\native\windows-service\NetSplitService.exe
+### 3. Launch the NetSplit Desktop GUI Application
 
-# Or install as automated Windows Service (Elevated):
+You can launch the full desktop application in any of the following ways:
+
+- **Direct Native App**: Double-click [`NetSplit.exe`](file:///d:/Workspace/Project/NetSplit/NetSplit.exe) in the root folder.
+- **Silent Script Launcher**: Double-click [`Launch-NetSplit.vbs`](file:///d:/Workspace/Project/NetSplit/Launch-NetSplit.vbs).
+- **Batch Launcher**: Double-click [`Launch-NetSplit.bat`](file:///d:/Workspace/Project/NetSplit/Launch-NetSplit.bat).
+- **From Command Line**:
+  ```powershell
+  npm start
+  ```
+
+*(When launched, NetSplit automatically ensures the privileged routing service is active in the background and opens the full Fluent 2 desktop GUI window without popping up raw terminal windows)*.
+
+### 4. Background Service Management (Optional)
+
+If you prefer to run the C++ routing service separately or install it permanently into Windows Service Control Manager (SCM):
+
+```powershell
+# Install as automated Windows Service (Elevated PowerShell):
 powershell -ExecutionPolicy Bypass -File .\scripts\install-service.ps1
-```
 
-### 4. Build & Launch Desktop UI
-```powershell
-npm run build:types
-npm run windows --workspace=@netsplit/desktop
+# Or run interactively in a console:
+.\native\windows-service\NetSplitService.exe
 ```
 
 ---

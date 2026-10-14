@@ -7,6 +7,9 @@
     "apps/*"
   ],
   "scripts": {
+    "start": "npm run desktop --workspace=@netsplit/desktop",
+    "desktop": "npm run desktop --workspace=@netsplit/desktop",
+    "build:ui": "npm run build:web --workspace=@netsplit/desktop",
     "build:types": "npm run build --workspace=@netsplit/shared-types",
     "build:service": "call native\\windows-service\\build.bat",
     "test": "node --test tests/unit/*.test.js tests/integration/*.test.js",

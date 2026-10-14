@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "NetSplit - Premium Windows 11 Desktop Application for Per-Application Network Routing",
   "private": true,
-  "main": "index.js",
+  "main": "electron/main.js",
   "scripts": {
-    "start": "react-native start",
+    "start": "vite",
+    "build:web": "vite build",
+    "desktop": "electron .",
     "windows": "react-native run-windows",
     "build": "tsc"
   },
@@ -18,6 +20,11 @@
   },
   "devDependencies": {
     "@types/react": "^18.3.1",
-    "typescript": "^5.4.0"
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.7.2",
+    "react-dom": "^18.3.1",
+    "react-native-web": "^0.21.4",
+    "typescript": "^5.4.0",
+    "vite": "^8.3.4"
   }
 }

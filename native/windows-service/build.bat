@@ -12,7 +12,7 @@ cl.exe /nologo /EHsc /O2 /W3 /std:c++17 ^
     native\windows-service\src\service_main.cpp ^
     /I native\windows-service\src ^
     /Fe:native\windows-service\NetSplitService.exe ^
-    /link ws2_32.lib iphlpapi.lib version.lib shlwapi.lib fwpuclnt.lib bcrypt.lib advapi32.lib shell32.lib ole32.lib
+    /link ws2_32.lib iphlpapi.lib version.lib shlwapi.lib fwpuclnt.lib bcrypt.lib advapi32.lib shell32.lib ole32.lib user32.lib
 
 if %ERRORLEVEL% equ 0 (
     echo [SUCCESS] NetSplitService.exe compiled successfully!

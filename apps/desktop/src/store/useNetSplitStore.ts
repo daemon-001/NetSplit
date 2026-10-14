@@ -101,6 +101,16 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   clearSelection: () => set({ selectedAppIds: [] }),
 
   init: async () => {
+    try {
+      if (typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { getToken: () => Promise<string | null> } }).netSplitHost?.getToken) {
+        const token = await (window as unknown as { netSplitHost: { getToken: () => Promise<string | null> } }).netSplitHost.getToken();
+        if (token) {
+          defaultIpcClient.setToken(token);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not retrieve host token:', e);
+    }
     await get().refreshAll();
   },
 
