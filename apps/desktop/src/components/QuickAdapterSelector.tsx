@@ -1,24 +1,31 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet, FlatList } from 'react-native';
-import { useNetSplitStore } from '../store/useNetSplitStore';
+import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
+import { useNetSplitStore, getOppositeAdapter, getDefaultAdapter } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
-import { ChevronDownIcon, CheckIcon, WifiIcon, EthernetIcon } from './Icons';
+import { ChevronDownIcon, CheckIcon, WifiIcon, EthernetIcon, SwapIcon, StarIcon } from './Icons';
 
 interface QuickAdapterSelectorProps {
   applicationId: string;
   assignedAdapterId?: string;
   assignedAdapterName?: string;
+  isOppositeDefault?: boolean;
+  isFollowDefault?: boolean;
 }
 
 export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
   applicationId,
   assignedAdapterId,
   assignedAdapterName,
+  isOppositeDefault: propIsOpposite,
+  isFollowDefault: propIsFollow,
 }) => {
   const [open, setOpen] = useState(false);
 
   const themeMode = useNetSplitStore((state) => state.themeMode);
   const adapters = useNetSplitStore((state) => state.adapters);
+  const settings = useNetSplitStore((state) => state.settings);
+  const oppositeDefaultAppIds = useNetSplitStore((state) => state.oppositeDefaultAppIds);
+  const followDefaultAppIds = useNetSplitStore((state) => state.followDefaultAppIds);
   const assignApp = useNetSplitStore((state) => state.assignApp);
   const removeAssignment = useNetSplitStore((state) => state.removeAssignment);
 
@@ -29,8 +36,14 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
     (a) => a.type === 'WIFI' || a.type === 'ETHERNET' || a.type === 'CELLULAR'
   );
 
+  const isOpposite = propIsOpposite || oppositeDefaultAppIds.includes(applicationId);
+  const isFollow = propIsFollow || followDefaultAppIds.includes(applicationId);
   const isAssigned = !!assignedAdapterId && assignedAdapterId.length > 0;
   const currentAdapter = adapters.find((a) => a.id === assignedAdapterId);
+
+  const effectiveDefaultId = settings.defaultAdapterId || adapters.find((a) => a.isDefaultRoute)?.id;
+  const defaultAdapter = getDefaultAdapter(adapters, effectiveDefaultId);
+  const oppositeAdapter = getOppositeAdapter(adapters, effectiveDefaultId);
 
   const handleSelectAdapter = async (adapterId: string) => {
     setOpen(false);
@@ -41,14 +54,47 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
     }
   };
 
+  let buttonLabel = 'Default (Windows)';
+  if (isFollow) {
+    buttonLabel = `★ Default (${currentAdapter ? currentAdapter.friendlyName : defaultAdapter?.friendlyName || 'Adapter'})`;
+  } else if (isOpposite) {
+    buttonLabel = `⇄ Opposite (${currentAdapter ? currentAdapter.friendlyName : oppositeAdapter?.friendlyName || 'Alternate'})`;
+  } else if (isAssigned) {
+    buttonLabel = currentAdapter ? currentAdapter.friendlyName : assignedAdapterName || 'Assigned';
+  }
+
+  const buttonBg = isFollow
+    ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5')
+    : isOpposite
+    ? (themeMode === 'dark' ? 'rgba(139, 92, 246, 0.15)' : '#f3e8ff')
+    : isAssigned
+    ? theme.accentSubtle
+    : theme.surfaceSubtle;
+
+  const buttonBorder = isFollow
+    ? (themeMode === 'dark' ? '#10b981' : '#059669')
+    : isOpposite
+    ? (themeMode === 'dark' ? '#8b5cf6' : '#7c3aed')
+    : isAssigned
+    ? theme.accent
+    : theme.border;
+
+  const buttonColor = isFollow
+    ? (themeMode === 'dark' ? '#6ee7b7' : '#047857')
+    : isOpposite
+    ? (themeMode === 'dark' ? '#c4b5fd' : '#6d28d9')
+    : isAssigned
+    ? theme.accent
+    : theme.textSecondary;
+
   return (
     <View>
       <TouchableOpacity
         style={[
           styles.button,
           {
-            backgroundColor: isAssigned ? theme.accentSubtle : theme.surfaceSubtle,
-            borderColor: isAssigned ? theme.accent : theme.border,
+            backgroundColor: buttonBg,
+            borderColor: buttonBorder,
           },
         ]}
         onPress={() => setOpen(true)}
@@ -57,15 +103,26 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
           style={[
             styles.buttonText,
             {
-              color: isAssigned ? theme.accent : theme.textSecondary,
-              fontWeight: isAssigned ? typography.weights.semibold : typography.weights.regular,
+              color: buttonColor,
+              fontWeight: (isAssigned || isOpposite || isFollow) ? typography.weights.semibold : typography.weights.regular,
             },
           ]}
           numberOfLines={1}
         >
-          {isAssigned ? (currentAdapter ? currentAdapter.friendlyName : assignedAdapterName || 'Assigned') : 'Default (Windows)'}
+          {buttonLabel}
         </Text>
-        <ChevronDownIcon size={10} color={isAssigned ? theme.accent : theme.textTertiary} />
+        <ChevronDownIcon
+          size={10}
+          color={
+            isFollow
+              ? (themeMode === 'dark' ? '#34d399' : '#059669')
+              : isOpposite
+              ? (themeMode === 'dark' ? '#a78bfa' : '#7c3aed')
+              : isAssigned
+              ? theme.accent
+              : theme.textTertiary
+          }
+        />
       </TouchableOpacity>
 
       {/* Dropdown Modal */}
@@ -88,28 +145,142 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
               <Text style={[styles.menuTitle, { color: theme.textTertiary }]}>ASSIGN NETWORK ADAPTER</Text>
             </View>
 
-            {/* Unassign option */}
+            {/* 1. Dynamic Default Adapter Option */}
             <TouchableOpacity
               style={[
                 styles.optionRow,
                 {
-                  backgroundColor: !isAssigned ? theme.surfaceActive : 'transparent',
+                  backgroundColor: isFollow
+                    ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.18)' : '#ecfdf5')
+                    : 'transparent',
+                },
+              ]}
+              onPress={() => handleSelectAdapter('DEFAULT_ADAPTER')}
+            >
+              <View style={styles.adapterIconBox}>
+                <StarIcon size={14} color={isFollow ? (themeMode === 'dark' ? '#6ee7b7' : '#059669') : theme.textSecondary} />
+              </View>
+
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text
+                    style={[
+                      styles.optionName,
+                      {
+                        color: isFollow ? (themeMode === 'dark' ? '#6ee7b7' : '#047857') : theme.textPrimary,
+                        fontWeight: '600',
+                      },
+                    ]}
+                  >
+                    Default Adapter
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.25)' : '#d1fae5',
+                      paddingHorizontal: 4,
+                      paddingVertical: 1,
+                      borderRadius: 3,
+                      marginLeft: 6,
+                    }}
+                  >
+                    <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#34d399' : '#059669', fontWeight: 'bold' }}>
+                      DYNAMIC
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
+                  Always routes via default connection (currently: {defaultAdapter?.friendlyName || 'Auto'})
+                </Text>
+              </View>
+
+              {isFollow && <CheckIcon size={14} color={themeMode === 'dark' ? '#34d399' : '#059669'} />}
+            </TouchableOpacity>
+
+            {/* 2. Dynamic Opposite to Default Adapter option */}
+            <TouchableOpacity
+              style={[
+                styles.optionRow,
+                {
+                  backgroundColor: isOpposite
+                    ? (themeMode === 'dark' ? 'rgba(139, 92, 246, 0.18)' : '#f3e8ff')
+                    : 'transparent',
+                  opacity: hardwareAdapters.length < 2 ? 0.5 : 1,
+                },
+              ]}
+              disabled={hardwareAdapters.length < 2}
+              onPress={() => handleSelectAdapter('OPPOSITE_DEFAULT')}
+            >
+              <View style={styles.adapterIconBox}>
+                <SwapIcon size={14} color={isOpposite ? (themeMode === 'dark' ? '#c4b5fd' : '#7c3aed') : theme.textSecondary} />
+              </View>
+
+              <View style={{ flex: 1, marginLeft: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text
+                    style={[
+                      styles.optionName,
+                      {
+                        color: isOpposite ? (themeMode === 'dark' ? '#c4b5fd' : '#6d28d9') : theme.textPrimary,
+                        fontWeight: '600',
+                      },
+                    ]}
+                  >
+                    Opposite to Default Adapter
+                  </Text>
+                  <View
+                    style={{
+                      backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.25)' : '#ede9fe',
+                      paddingHorizontal: 4,
+                      paddingVertical: 1,
+                      borderRadius: 3,
+                      marginLeft: 6,
+                    }}
+                  >
+                    <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#a78bfa' : '#6d28d9', fontWeight: 'bold' }}>
+                      DYNAMIC
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
+                  {hardwareAdapters.length >= 2
+                    ? `Always routes via non-default link (currently: ${oppositeAdapter?.friendlyName || 'Secondary'})`
+                    : 'Requires 2 or more active network adapters'}
+                </Text>
+              </View>
+
+              {isOpposite && <CheckIcon size={14} color={themeMode === 'dark' ? '#a78bfa' : '#7c3aed'} />}
+            </TouchableOpacity>
+
+            {/* 3. Unassign / Standard Windows routing option */}
+            <TouchableOpacity
+              style={[
+                styles.optionRow,
+                {
+                  backgroundColor: !isAssigned && !isOpposite && !isFollow ? theme.surfaceActive : 'transparent',
                 },
               ]}
               onPress={() => handleSelectAdapter('UNASSIGN')}
             >
               <View style={{ flex: 1 }}>
-                <Text style={[styles.optionName, { color: theme.textPrimary }]}>Windows Default Routing</Text>
-                <Text style={[styles.optionSub, { color: theme.textTertiary }]}>Follow normal system interface metric</Text>
+                <Text style={[styles.optionName, { color: theme.textPrimary }]}>Windows Default (Unassigned)</Text>
+                <Text style={[styles.optionSub, { color: theme.textTertiary }]}>Follow normal system interface metric without rules</Text>
               </View>
-              {!isAssigned && <CheckIcon size={14} color={theme.accent} />}
+              {!isAssigned && !isOpposite && !isFollow && <CheckIcon size={14} color={theme.accent} />}
             </TouchableOpacity>
 
             <View style={[styles.divider, { backgroundColor: theme.borderSubtle }]} />
 
+            <View style={{ paddingHorizontal: spacing.sm, paddingVertical: 3 }}>
+              <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.5 }}>
+                SPECIFIC ADAPTERS
+              </Text>
+            </View>
+
             {/* Hardware Adapters List */}
             {hardwareAdapters.map((a) => {
-              const isSelected = assignedAdapterId === a.id;
+              const isSelected = !isOpposite && !isFollow && assignedAdapterId === a.id;
               const isUp = a.status === 'UP';
 
               return (
@@ -136,7 +307,7 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
                       <Text style={[styles.optionName, { color: theme.textPrimary, flex: 1 }]} numberOfLines={1}>
                         {a.friendlyName}
                       </Text>
-                      {a.isDefaultRoute && (
+                      {((settings.defaultRoutingPolicy === 'PREFER_ADAPTER' ? settings.defaultAdapterId === a.id : a.isDefaultRoute) || a.id === effectiveDefaultId) && (
                         <View style={{ backgroundColor: theme.accentSubtle, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, marginLeft: 4 }}>
                           <Text style={{ fontSize: 9, color: theme.accent, fontWeight: 'bold' }}>DEFAULT</Text>
                         </View>

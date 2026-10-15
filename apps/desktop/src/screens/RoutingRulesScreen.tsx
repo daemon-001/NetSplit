@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Switch, StyleSheet } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
@@ -6,6 +6,9 @@ import { StatusBadge } from '../components/StatusBadge';
 import { ShieldIcon, RefreshIcon } from '../components/Icons';
 import { QuickAdapterSelector } from '../components/QuickAdapterSelector';
 import { BulkActionBar } from '../components/BulkActionBar';
+
+type RuleSortColumn = 'app' | 'adapter' | 'enabled' | 'status';
+type SortOrder = 'asc' | 'desc';
 
 export const RoutingRulesScreen: React.FC = () => {
   const themeMode = useNetSplitStore((state) => state.themeMode);
@@ -21,28 +24,124 @@ export const RoutingRulesScreen: React.FC = () => {
   const selectAllApps = useNetSplitStore((state) => state.selectAllApps);
   const clearSelection = useNetSplitStore((state) => state.clearSelection);
 
+  // Filter tabs and sorting state
+  const [ruleFilter, setRuleFilter] = useState<string>('all');
+  const [sortColumn, setSortColumn] = useState<RuleSortColumn>('app');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
-  // Filter rules by topbar search query
-  const filteredRules = rules.filter((r) => {
-    if (!searchQuery.trim()) return true;
+  // Compute counts for top filter tabs
+  const totalCount = rules.length;
+  const enabledCount = rules.filter((r) => r.enabled).length;
+  const disabledCount = rules.filter((r) => !r.enabled).length;
+  const errorCount = rules.filter((r) => r.status === 'ERROR').length;
+  const followDefaultCount = rules.filter((r) => r.isFollowDefault).length;
+  const oppositeCount = rules.filter((r) => r.isOppositeDefault).length;
+
+  // Group adapters that have rules
+  const adapterMap = new Map<string, { name: string; count: number }>();
+  for (const r of rules) {
+    const existing = adapterMap.get(r.adapterId);
+    if (existing) {
+      existing.count++;
+    } else {
+      adapterMap.set(r.adapterId, { name: r.adapterName, count: 1 });
+    }
+  }
+
+  const filterTabs = [
+    { key: 'all', label: `All (${totalCount})` },
+    { key: 'enabled', label: `Enabled (${enabledCount})` },
+    { key: 'disabled', label: `Disabled (${disabledCount})` },
+    ...(followDefaultCount > 0 ? [{ key: 'follow_default', label: `★ Default (${followDefaultCount})` }] : []),
+    ...(oppositeCount > 0 ? [{ key: 'opposite', label: `⇄ Opposite (${oppositeCount})` }] : []),
+    ...(errorCount > 0 ? [{ key: 'error', label: `Errors (${errorCount})` }] : []),
+    ...Array.from(adapterMap.entries()).map(([id, data]) => ({
+      key: `adapter:${id}`,
+      label: `${data.name} (${data.count})`,
+    })),
+  ];
+
+  // 1. Filter rules by tab
+  let filteredRules = rules.filter((r) => {
+    if (ruleFilter === 'all') return true;
+    if (ruleFilter === 'enabled') return r.enabled;
+    if (ruleFilter === 'disabled') return !r.enabled;
+    if (ruleFilter === 'follow_default') return !!r.isFollowDefault;
+    if (ruleFilter === 'opposite') return !!r.isOppositeDefault;
+    if (ruleFilter === 'error') return r.status === 'ERROR';
+    if (ruleFilter.startsWith('adapter:')) {
+      return r.adapterId === ruleFilter.replace('adapter:', '');
+    }
+    return true;
+  });
+
+  // 2. Filter rules by topbar search query
+  if (searchQuery.trim()) {
     const q = searchQuery.toLowerCase().trim();
-    return (
-      r.applicationName.toLowerCase().includes(q) ||
-      r.executablePath.toLowerCase().includes(q) ||
-      r.adapterName.toLowerCase().includes(q)
+    filteredRules = filteredRules.filter(
+      (r) =>
+        r.applicationName.toLowerCase().includes(q) ||
+        r.executablePath.toLowerCase().includes(q) ||
+        r.adapterName.toLowerCase().includes(q)
     );
+  }
+
+  // 3. Sort rules
+  const handleSort = (column: RuleSortColumn) => {
+    if (sortColumn === column) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumn(column);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedRules = [...filteredRules].sort((a, b) => {
+    let comparison = 0;
+    if (sortColumn === 'app') {
+      comparison = a.applicationName.localeCompare(b.applicationName, undefined, { numeric: true, sensitivity: 'base' });
+      if (comparison === 0) {
+        comparison = a.executablePath.localeCompare(b.executablePath);
+      }
+    } else if (sortColumn === 'adapter') {
+      comparison = a.adapterName.localeCompare(b.adapterName);
+      if (comparison === 0) {
+        comparison = a.applicationName.localeCompare(b.applicationName);
+      }
+    } else if (sortColumn === 'enabled') {
+      comparison = (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0);
+      if (comparison === 0) {
+        comparison = a.applicationName.localeCompare(b.applicationName);
+      }
+    } else if (sortColumn === 'status') {
+      const rank: Record<string, number> = {
+        ACTIVE: 4,
+        UNVERIFIED: 3,
+        PENDING: 2,
+        ERROR: 1,
+        INACTIVE: 0,
+      };
+      const rankA = rank[a.status] ?? -1;
+      const rankB = rank[b.status] ?? -1;
+      comparison = rankB - rankA;
+      if (comparison === 0) {
+        comparison = a.applicationName.localeCompare(b.applicationName);
+      }
+    }
+    return sortOrder === 'asc' ? comparison : -comparison;
   });
 
   const allSelected =
-    filteredRules.length > 0 &&
-    filteredRules.every((r) => selectedAppIds.includes(r.applicationId));
+    sortedRules.length > 0 &&
+    sortedRules.every((r) => selectedAppIds.includes(r.applicationId));
 
   const handleToggleSelectAll = () => {
     if (allSelected) {
       clearSelection();
     } else {
-      selectAllApps(filteredRules.map((r) => r.applicationId));
+      selectAllApps(sortedRules.map((r) => r.applicationId));
     }
   };
 
@@ -55,7 +154,7 @@ export const RoutingRulesScreen: React.FC = () => {
             Enforced Windows Filtering Platform (WFP) Rules ({rules.length})
           </Text>
           <Text style={[styles.bannerSubtitle, { color: theme.textSecondary }]}>
-            These rules are actively bound to the Windows network stack. Select rules to bulk change target adapters or toggle enforcement.
+            These rules are actively bound to the Windows network stack. NetSplit will only mark a rule 'Active' when kernel/adapter verification succeeds.
           </Text>
         </View>
 
@@ -70,7 +169,50 @@ export const RoutingRulesScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Rules Table Header */}
+      {/* Top Filter Tabs Bar */}
+      <View style={[styles.controlBar, { backgroundColor: theme.surfaceCard, borderBottomColor: theme.border }]}>
+        <View style={styles.filterTabs}>
+          {filterTabs.map((tab) => {
+            const isActive = ruleFilter === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.tabBtn,
+                  {
+                    backgroundColor: isActive ? theme.surfaceActive : 'transparent',
+                    borderColor: isActive ? theme.borderStrong : 'transparent',
+                  },
+                ]}
+                onPress={() => setRuleFilter(tab.key)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.tabBtnText,
+                    {
+                      color: isActive ? theme.textPrimary : theme.textSecondary,
+                      fontWeight: isActive ? typography.weights.semibold : typography.weights.regular,
+                    },
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.addBtn, { backgroundColor: theme.accent }]}
+          onPress={() => setCurrentScreen('apps')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.addBtnText, { color: '#ffffff' }]}>+ Add Rule</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Rules Table Header with Clickable Arrow Sort Filters */}
       <View style={[styles.tableHeader, { backgroundColor: theme.tableHeaderBg, borderBottomColor: theme.border }]}>
         {/* Select All Checkbox */}
         <TouchableOpacity style={styles.colCheck} onPress={handleToggleSelectAll} activeOpacity={0.7}>
@@ -87,18 +229,115 @@ export const RoutingRulesScreen: React.FC = () => {
           </View>
         </TouchableOpacity>
 
-        <View style={styles.colApp}>
-          <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>APPLICATION & BINARY PATH</Text>
-        </View>
-        <View style={styles.colAdapter}>
-          <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>TARGET ADAPTER</Text>
-        </View>
-        <View style={styles.colEnabled}>
-          <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>ENABLED</Text>
-        </View>
-        <View style={styles.colStatus}>
-          <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>ENFORCEMENT STATUS</Text>
-        </View>
+        {/* APPLICATION Column Header */}
+        <TouchableOpacity
+          style={[styles.colApp, styles.headerSortBtn]}
+          onPress={() => handleSort('app')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.colHeaderText,
+              { color: sortColumn === 'app' ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            APPLICATION & BINARY PATH
+          </Text>
+          <Text
+            style={[
+              styles.sortArrow,
+              {
+                color: sortColumn === 'app' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'app' ? 1 : 0.4,
+              },
+            ]}
+          >
+            {sortColumn === 'app' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* TARGET ADAPTER Column Header */}
+        <TouchableOpacity
+          style={[styles.colAdapter, styles.headerSortBtn]}
+          onPress={() => handleSort('adapter')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.colHeaderText,
+              { color: sortColumn === 'adapter' ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            TARGET ADAPTER
+          </Text>
+          <Text
+            style={[
+              styles.sortArrow,
+              {
+                color: sortColumn === 'adapter' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'adapter' ? 1 : 0.4,
+              },
+            ]}
+          >
+            {sortColumn === 'adapter' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* ENABLED Column Header */}
+        <TouchableOpacity
+          style={[styles.colEnabled, styles.headerSortBtn]}
+          onPress={() => handleSort('enabled')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.colHeaderText,
+              { color: sortColumn === 'enabled' ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            ENABLED
+          </Text>
+          <Text
+            style={[
+              styles.sortArrow,
+              {
+                color: sortColumn === 'enabled' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'enabled' ? 1 : 0.4,
+              },
+            ]}
+          >
+            {sortColumn === 'enabled' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* ENFORCEMENT STATUS Column Header */}
+        <TouchableOpacity
+          style={[styles.colStatus, styles.headerSortBtn]}
+          onPress={() => handleSort('status')}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[
+              styles.colHeaderText,
+              { color: sortColumn === 'status' ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            ENFORCEMENT STATUS
+          </Text>
+          <Text
+            style={[
+              styles.sortArrow,
+              {
+                color: sortColumn === 'status' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'status' ? 1 : 0.4,
+              },
+            ]}
+          >
+            {sortColumn === 'status' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+          </Text>
+        </TouchableOpacity>
+
+        {/* ACTIONS Column Header */}
         <View style={styles.colActions}>
           <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>ACTIONS</Text>
         </View>
@@ -106,7 +345,7 @@ export const RoutingRulesScreen: React.FC = () => {
 
       {/* Rules List */}
       <FlatList
-        data={filteredRules}
+        data={sortedRules}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => {
           const isSelected = selectedAppIds.includes(item.applicationId);
@@ -156,6 +395,8 @@ export const RoutingRulesScreen: React.FC = () => {
                   applicationId={item.applicationId}
                   assignedAdapterId={item.adapterId}
                   assignedAdapterName={item.adapterName}
+                  isOppositeDefault={item.isOppositeDefault}
+                  isFollowDefault={item.isFollowDefault}
                 />
                 <Text style={[styles.fallbackText, { color: theme.textTertiary }]} numberOfLines={1}>
                   Fallback: {item.fallbackMode === 'BLOCK' ? 'Drop / Kill-Switch' : 'Windows Default'}
@@ -197,14 +438,14 @@ export const RoutingRulesScreen: React.FC = () => {
           <View style={styles.emptyContainer}>
             <ShieldIcon size={36} color={theme.textTertiary} />
             <Text style={[styles.emptyTitle, { color: theme.textPrimary, marginTop: 12 }]}>
-              {searchQuery ? 'No matching routing rules found' : 'No active routing rules'}
+              {searchQuery || ruleFilter !== 'all' ? 'No matching routing rules found' : 'No active routing rules'}
             </Text>
             <Text style={[styles.emptySubtitle, { color: theme.textTertiary }]}>
-              {searchQuery
-                ? 'Try clearing your search query in the top bar.'
+              {searchQuery || ruleFilter !== 'all'
+                ? 'Try resetting your filter tabs or search query.'
                 : 'Assign applications to network adapters in the Applications tab to create rules.'}
             </Text>
-            {!searchQuery && (
+            {!searchQuery && ruleFilter === 'all' && (
               <TouchableOpacity
                 style={[styles.addFirstBtn, { backgroundColor: theme.accent, marginTop: 16 }]}
                 onPress={() => setCurrentScreen('apps')}
@@ -258,6 +499,40 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.xs,
     fontWeight: typography.weights.semibold,
   },
+  controlBar: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  filterTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  tabBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    marginRight: 6,
+  },
+  tabBtnText: {
+    fontFamily: typography.fontFamily,
+    fontSize: typography.sizes.xs,
+  },
+  addBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+  },
+  addBtnText: {
+    fontFamily: typography.fontFamily,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+  },
   tableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -284,6 +559,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: typography.weights.bold,
     letterSpacing: 0.5,
+  },
+  headerSortBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    cursor: 'pointer' as unknown as undefined,
+    userSelect: 'none' as unknown as undefined,
+  },
+  sortArrow: {
+    fontFamily: typography.fontFamilyMono,
+    fontSize: 10,
+    marginLeft: 4,
+    fontWeight: typography.weights.bold,
   },
   tableRow: {
     flexDirection: 'row',

@@ -14,6 +14,89 @@ import { defaultIpcClient } from '../services/ipcClient';
 export type ScreenType = 'overview' | 'apps' | 'adapters' | 'rules' | 'activity' | 'settings';
 export type AppFilterType = 'all' | 'running' | 'foreground' | 'background' | 'assigned' | 'unassigned' | 'windows';
 
+const OPPOSITE_STORAGE_KEY = 'netsplit_opposite_default_apps';
+
+export const loadOppositeDefaultApps = (): string[] => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem(OPPOSITE_STORAGE_KEY);
+      if (stored) return JSON.parse(stored);
+    }
+  } catch (e) {
+    // ignore
+  }
+  return [];
+};
+
+export const saveOppositeDefaultApps = (appIds: string[]) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(OPPOSITE_STORAGE_KEY, JSON.stringify(appIds));
+    }
+  } catch (e) {
+    // ignore
+  }
+};
+
+const FOLLOW_DEFAULT_STORAGE_KEY = 'netsplit_follow_default_apps';
+
+export const loadFollowDefaultApps = (): string[] => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem(FOLLOW_DEFAULT_STORAGE_KEY);
+      if (stored) return JSON.parse(stored);
+    }
+  } catch (e) {
+    // ignore
+  }
+  return [];
+};
+
+export const saveFollowDefaultApps = (appIds: string[]) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(FOLLOW_DEFAULT_STORAGE_KEY, JSON.stringify(appIds));
+    }
+  } catch (e) {
+    // ignore
+  }
+};
+
+export const getDefaultAdapter = (
+  adapters: NetworkAdapter[],
+  defaultAdapterId?: string
+): NetworkAdapter | undefined => {
+  if (adapters.length === 0) return undefined;
+  return (
+    adapters.find((a) => a.id === defaultAdapterId) ||
+    adapters.find((a) => a.isDefaultRoute) ||
+    adapters.find((a) => a.type === 'WIFI' || a.type === 'ETHERNET' || a.type === 'CELLULAR') ||
+    adapters[0]
+  );
+};
+
+export const getOppositeAdapter = (
+  adapters: NetworkAdapter[],
+  defaultAdapterId?: string
+): NetworkAdapter | undefined => {
+  const hardwareAdapters = adapters.filter(
+    (a) => a.type === 'WIFI' || a.type === 'ETHERNET' || a.type === 'CELLULAR'
+  );
+  if (hardwareAdapters.length < 2) return undefined;
+
+  const effectiveDefaultId =
+    defaultAdapterId ||
+    adapters.find((a) => a.isDefaultRoute)?.id ||
+    hardwareAdapters[0]?.id;
+
+  const upOpposite = hardwareAdapters.find(
+    (a) => a.id !== effectiveDefaultId && a.status === 'UP'
+  );
+  if (upOpposite) return upOpposite;
+
+  return hardwareAdapters.find((a) => a.id !== effectiveDefaultId);
+};
+
 interface NetSplitState {
   currentScreen: ScreenType;
   themeMode: 'dark' | 'light';
@@ -28,6 +111,8 @@ interface NetSplitState {
   rules: RoutingRule[];
   activities: ActivityEvent[];
   settings: GlobalSettings;
+  oppositeDefaultAppIds: string[];
+  followDefaultAppIds: string[];
 
   // Search & Filters
   searchQuery: string;
@@ -56,6 +141,8 @@ interface NetSplitState {
   toggleRule: (ruleId: string, enabled: boolean) => Promise<void>;
   bulkToggleRules: (appIds: string[], enabled: boolean) => Promise<void>;
   verifyRules: () => Promise<void>;
+  syncOppositeDefaultRules: (overrideDefaultAdapterId?: string) => Promise<void>;
+  syncFollowDefaultRules: (overrideDefaultAdapterId?: string) => Promise<void>;
   addManualApp: (path: string, customName?: string) => Promise<boolean>;
   updateSettings: (settings: Partial<GlobalSettings>) => Promise<void>;
   setDefaultAdapter: (adapterId: string, policy?: 'WINDOWS_DEFAULT' | 'PREFER_ADAPTER') => Promise<void>;
@@ -82,6 +169,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     enableAuditLogging: true,
     themeMode: 'DARK',
   },
+  oppositeDefaultAppIds: loadOppositeDefaultApps(),
+  followDefaultAppIds: loadFollowDefaultApps(),
 
   searchQuery: '',
   appFilter: 'all',
@@ -163,7 +252,15 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       ]);
 
       // Derive rules from apps that have assigned adapters
-      const rules: RoutingRule[] = apps
+      const oppositeIds = get().oppositeDefaultAppIds;
+      const followDefaultIds = get().followDefaultAppIds;
+      const appsWithDynamic = apps.map((a) => ({
+        ...a,
+        isOppositeDefault: oppositeIds.includes(a.id),
+        isFollowDefault: followDefaultIds.includes(a.id),
+      }));
+
+      const rules: RoutingRule[] = appsWithDynamic
         .filter((a) => a.assignedAdapterId && a.assignedAdapterId.length > 0)
         .map((a) => ({
           id: `rule-${a.id}`,
@@ -172,6 +269,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
           executablePath: a.executablePath,
           adapterId: a.assignedAdapterId!,
           adapterName: a.assignedAdapterName || 'Adapter',
+          isOppositeDefault: a.isOppositeDefault,
+          isFollowDefault: a.isFollowDefault,
           enabled: a.ruleStatus !== 'INACTIVE',
           fallbackMode: 'BLOCK',
           status: a.ruleStatus || 'ACTIVE',
@@ -183,12 +282,50 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
         serviceConnected: status !== null,
         systemStatus: status,
         adapters: adapters.length > 0 ? adapters : state.adapters,
-        apps: apps,
+        apps: appsWithDynamic,
         rules: rules,
         activities: activity,
         settings: cfg ? cfg : state.settings,
         isLoading: false,
       }));
+
+      // Check if any opposite-default or follow-default app is out of sync
+      if (adapters.length > 0) {
+        const effectiveDefaultId =
+          cfg?.defaultAdapterId ||
+          get().settings.defaultAdapterId ||
+          adapters.find((a) => a.isDefaultRoute)?.id;
+
+        if (followDefaultIds.length > 0) {
+          const targetDefault = getDefaultAdapter(adapters, effectiveDefaultId);
+          if (targetDefault) {
+            const needsSync = appsWithDynamic.some(
+              (a) =>
+                followDefaultIds.includes(a.id) &&
+                a.assignedAdapterId &&
+                a.assignedAdapterId !== targetDefault.id
+            );
+            if (needsSync) {
+              get().syncFollowDefaultRules(effectiveDefaultId).catch(() => {});
+            }
+          }
+        }
+
+        if (oppositeIds.length > 0 && adapters.length >= 2) {
+          const targetOpposite = getOppositeAdapter(adapters, effectiveDefaultId);
+          if (targetOpposite) {
+            const needsSync = appsWithDynamic.some(
+              (a) =>
+                oppositeIds.includes(a.id) &&
+                a.assignedAdapterId &&
+                a.assignedAdapterId !== targetOpposite.id
+            );
+            if (needsSync) {
+              get().syncOppositeDefaultRules(effectiveDefaultId).catch(() => {});
+            }
+          }
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       set({ serviceConnected: false, lastError: msg, isLoading: false });
@@ -196,10 +333,40 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
 
   assignApp: async (appId: string, adapterId: string, fallbackMode: FallbackPolicy = 'BLOCK') => {
-    const { apps, adapters, rules } = get();
+    const { apps, adapters, rules, settings, oppositeDefaultAppIds, followDefaultAppIds } = get();
     const app = apps.find((a) => a.id === appId);
-    const adapter = adapters.find((a) => a.id === adapterId);
-    if (!app || !adapter) return;
+    if (!app) return;
+
+    const isOpposite = adapterId === 'OPPOSITE_DEFAULT';
+    const isFollow = adapterId === 'DEFAULT_ADAPTER';
+    const effectiveDefaultId =
+      settings.defaultAdapterId || adapters.find((a) => a.isDefaultRoute)?.id;
+
+    let adapter: NetworkAdapter | undefined;
+    if (isOpposite) {
+      adapter = getOppositeAdapter(adapters, effectiveDefaultId);
+    } else if (isFollow) {
+      adapter = getDefaultAdapter(adapters, effectiveDefaultId);
+    } else {
+      adapter = adapters.find((a) => a.id === adapterId);
+    }
+
+    if (!adapter) {
+      if (isOpposite) {
+        console.warn('Cannot resolve opposite adapter: need at least 2 active network adapters');
+      }
+      return;
+    }
+
+    const nextOppositeIds = isOpposite
+      ? Array.from(new Set([...oppositeDefaultAppIds, appId]))
+      : oppositeDefaultAppIds.filter((id) => id !== appId);
+    saveOppositeDefaultApps(nextOppositeIds);
+
+    const nextFollowIds = isFollow
+      ? Array.from(new Set([...followDefaultAppIds, appId]))
+      : followDefaultAppIds.filter((id) => id !== appId);
+    saveFollowDefaultApps(nextFollowIds);
 
     // 1. Optimistic update immediately for instant UI feedback
     const prevApps = apps;
@@ -211,6 +378,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             ...a,
             assignedAdapterId: adapter.id,
             assignedAdapterName: adapter.friendlyName,
+            isOppositeDefault: isOpposite,
+            isFollowDefault: isFollow,
             ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
           }
         : a
@@ -224,6 +393,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       executablePath: app.executablePath,
       adapterId: adapter.id,
       adapterName: adapter.friendlyName,
+      isOppositeDefault: isOpposite,
+      isFollowDefault: isFollow,
       enabled: true,
       fallbackMode,
       status: 'ACTIVE',
@@ -232,11 +403,18 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     };
 
     const existingIdx = rules.findIndex((r) => r.applicationId === appId || r.id === ruleId);
-    const updatedRules = existingIdx >= 0
-      ? rules.map((r, i) => (i === existingIdx ? newRule : r))
-      : [...rules, newRule];
+    const updatedRules =
+      existingIdx >= 0
+        ? rules.map((r, i) => (i === existingIdx ? newRule : r))
+        : [...rules, newRule];
 
-    set({ apps: updatedApps, rules: updatedRules, lastError: null });
+    set({
+      apps: updatedApps,
+      rules: updatedRules,
+      oppositeDefaultAppIds: nextOppositeIds,
+      followDefaultAppIds: nextFollowIds,
+      lastError: null,
+    });
 
     // 2. Perform backend action asynchronously
     try {
@@ -255,9 +433,34 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
 
   bulkAssign: async (adapterId) => {
-    const { selectedAppIds, apps, adapters, rules } = get();
-    const adapter = adapters.find((a) => a.id === adapterId);
-    if (!adapter || selectedAppIds.length === 0) return { succeeded: 0, failed: 0 };
+    const { selectedAppIds, apps, adapters, rules, settings, oppositeDefaultAppIds, followDefaultAppIds } = get();
+    if (selectedAppIds.length === 0) return { succeeded: 0, failed: 0 };
+
+    const isOpposite = adapterId === 'OPPOSITE_DEFAULT';
+    const isFollow = adapterId === 'DEFAULT_ADAPTER';
+    const effectiveDefaultId =
+      settings.defaultAdapterId || adapters.find((a) => a.isDefaultRoute)?.id;
+
+    let adapter: NetworkAdapter | undefined;
+    if (isOpposite) {
+      adapter = getOppositeAdapter(adapters, effectiveDefaultId);
+    } else if (isFollow) {
+      adapter = getDefaultAdapter(adapters, effectiveDefaultId);
+    } else {
+      adapter = adapters.find((a) => a.id === adapterId);
+    }
+
+    if (!adapter) return { succeeded: 0, failed: 0 };
+
+    const nextOppositeIds = isOpposite
+      ? Array.from(new Set([...oppositeDefaultAppIds, ...selectedAppIds]))
+      : oppositeDefaultAppIds.filter((id) => !selectedAppIds.includes(id));
+    saveOppositeDefaultApps(nextOppositeIds);
+
+    const nextFollowIds = isFollow
+      ? Array.from(new Set([...followDefaultAppIds, ...selectedAppIds]))
+      : followDefaultAppIds.filter((id) => !selectedAppIds.includes(id));
+    saveFollowDefaultApps(nextFollowIds);
 
     const prevApps = apps;
     const prevRules = rules;
@@ -269,6 +472,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             ...a,
             assignedAdapterId: adapter.id,
             assignedAdapterName: adapter.friendlyName,
+            isOppositeDefault: isOpposite,
+            isFollowDefault: isFollow,
             ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
           }
         : a
@@ -287,6 +492,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
           executablePath: app.executablePath,
           adapterId: adapter.id,
           adapterName: adapter.friendlyName,
+          isOppositeDefault: isOpposite,
+          isFollowDefault: isFollow,
           enabled: true,
           fallbackMode: 'BLOCK',
           status: 'ACTIVE',
@@ -299,6 +506,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     set({
       apps: updatedApps,
       rules: Array.from(rulesMap.values()),
+      oppositeDefaultAppIds: nextOppositeIds,
+      followDefaultAppIds: nextFollowIds,
       selectedAppIds: [],
       lastError: null,
     });
@@ -342,8 +551,14 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
 
   bulkUnassign: async () => {
-    const { selectedAppIds, apps, rules } = get();
+    const { selectedAppIds, apps, rules, oppositeDefaultAppIds, followDefaultAppIds } = get();
     if (selectedAppIds.length === 0) return;
+
+    const nextOppositeIds = oppositeDefaultAppIds.filter((id) => !selectedAppIds.includes(id));
+    saveOppositeDefaultApps(nextOppositeIds);
+
+    const nextFollowIds = followDefaultAppIds.filter((id) => !selectedAppIds.includes(id));
+    saveFollowDefaultApps(nextFollowIds);
 
     const prevApps = apps;
     const prevRules = rules;
@@ -355,6 +570,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             ...a,
             assignedAdapterId: undefined,
             assignedAdapterName: undefined,
+            isOppositeDefault: false,
+            isFollowDefault: false,
             ruleStatus: 'NONE' as RuleEnforcementStatus,
           }
         : a
@@ -364,6 +581,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     set({
       apps: updatedApps,
       rules: updatedRules,
+      oppositeDefaultAppIds: nextOppositeIds,
+      followDefaultAppIds: nextFollowIds,
       selectedAppIds: [],
       lastError: null,
     });
@@ -379,7 +598,13 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
 
   removeAssignment: async (appId) => {
-    const { apps, rules } = get();
+    const { apps, rules, oppositeDefaultAppIds, followDefaultAppIds } = get();
+    const nextOppositeIds = oppositeDefaultAppIds.filter((id) => id !== appId);
+    saveOppositeDefaultApps(nextOppositeIds);
+
+    const nextFollowIds = followDefaultAppIds.filter((id) => id !== appId);
+    saveFollowDefaultApps(nextFollowIds);
+
     const prevApps = apps;
     const prevRules = rules;
 
@@ -390,13 +615,21 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             ...a,
             assignedAdapterId: undefined,
             assignedAdapterName: undefined,
+            isOppositeDefault: false,
+            isFollowDefault: false,
             ruleStatus: 'NONE' as RuleEnforcementStatus,
           }
         : a
     );
     const updatedRules = rules.filter((r) => r.applicationId !== appId && r.id !== `rule-${appId}`);
 
-    set({ apps: updatedApps, rules: updatedRules, lastError: null });
+    set({
+      apps: updatedApps,
+      rules: updatedRules,
+      oppositeDefaultAppIds: nextOppositeIds,
+      followDefaultAppIds: nextFollowIds,
+      lastError: null,
+    });
 
     // 2. Perform backend removal asynchronously
     try {
@@ -511,6 +744,126 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     }
   },
 
+  syncOppositeDefaultRules: async (overrideDefaultAdapterId?: string) => {
+    const { oppositeDefaultAppIds, apps, adapters, rules, settings } = get();
+    if (oppositeDefaultAppIds.length === 0 || adapters.length < 2) return;
+
+    const defaultId =
+      overrideDefaultAdapterId ||
+      settings.defaultAdapterId ||
+      adapters.find((a) => a.isDefaultRoute)?.id;
+    const newOpposite = getOppositeAdapter(adapters, defaultId);
+    if (!newOpposite) return;
+
+    // Filter apps that need updating
+    const appsToUpdate = apps.filter(
+      (a) => oppositeDefaultAppIds.includes(a.id) && a.assignedAdapterId !== newOpposite.id
+    );
+
+    if (appsToUpdate.length === 0) return;
+
+    // Optimistically update all affected apps and rules
+    const updatedApps = apps.map((a) =>
+      oppositeDefaultAppIds.includes(a.id)
+        ? {
+            ...a,
+            assignedAdapterId: newOpposite.id,
+            assignedAdapterName: newOpposite.friendlyName,
+            isOppositeDefault: true,
+            ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
+          }
+        : a
+    );
+
+    const updatedRules = rules.map((r) =>
+      oppositeDefaultAppIds.includes(r.applicationId)
+        ? {
+            ...r,
+            adapterId: newOpposite.id,
+            adapterName: newOpposite.friendlyName,
+            isOppositeDefault: true,
+          }
+        : r
+    );
+
+    set({ apps: updatedApps, rules: updatedRules });
+
+    // Send RPC assignments for each app
+    for (const app of appsToUpdate) {
+      try {
+        await defaultIpcClient.assignRule({
+          applicationId: app.id,
+          executablePath: app.executablePath,
+          applicationName: app.name,
+          adapterId: newOpposite.id,
+          fallbackMode: 'BLOCK',
+        });
+      } catch (e) {
+        console.warn(`Failed to reassign opposite app ${app.name}:`, e);
+      }
+    }
+  },
+
+  syncFollowDefaultRules: async (overrideDefaultAdapterId?: string) => {
+    const { followDefaultAppIds, apps, adapters, rules, settings } = get();
+    if (followDefaultAppIds.length === 0 || adapters.length === 0) return;
+
+    const defaultId =
+      overrideDefaultAdapterId ||
+      settings.defaultAdapterId ||
+      adapters.find((a) => a.isDefaultRoute)?.id;
+    const newDefault = getDefaultAdapter(adapters, defaultId);
+    if (!newDefault) return;
+
+    // Filter apps that need updating
+    const appsToUpdate = apps.filter(
+      (a) => followDefaultAppIds.includes(a.id) && a.assignedAdapterId !== newDefault.id
+    );
+
+    if (appsToUpdate.length === 0) return;
+
+    // Optimistically update all affected apps and rules
+    const updatedApps = apps.map((a) =>
+      followDefaultAppIds.includes(a.id)
+        ? {
+            ...a,
+            assignedAdapterId: newDefault.id,
+            assignedAdapterName: newDefault.friendlyName,
+            isFollowDefault: true,
+            ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
+          }
+        : a
+    );
+
+    const updatedRules = rules.map((r) =>
+      followDefaultAppIds.includes(r.applicationId)
+        ? {
+            ...r,
+            adapterId: newDefault.id,
+            adapterName: newDefault.friendlyName,
+            isFollowDefault: true,
+          }
+        : r
+    );
+
+    set({ apps: updatedApps, rules: updatedRules });
+
+    // Send RPC assignments for each app
+    for (const app of appsToUpdate) {
+      try {
+        await defaultIpcClient.assignRule({
+          applicationId: app.id,
+          executablePath: app.executablePath,
+          applicationName: app.name,
+          adapterId: newDefault.id,
+          fallbackMode: 'BLOCK',
+        });
+      } catch (e) {
+        console.warn(`Failed to reassign follow default app ${app.name}:`, e);
+      }
+    }
+  },
+
   updateSettings: async (settings) => {
     const prevSettings = get().settings;
     // 1. Optimistic update immediately for instant switch animation
@@ -542,7 +895,11 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       lastError: null,
     }));
 
-    // 2. Perform backend update
+    // 2. Trigger instant synchronization for all "Opposite to Default" and "Follow Default" apps!
+    get().syncOppositeDefaultRules(adapterId).catch(() => {});
+    get().syncFollowDefaultRules(adapterId).catch(() => {});
+
+    // 3. Perform backend update
     try {
       const res = await defaultIpcClient.setDefaultAdapter(adapterId, policy);
       if (res.success) {

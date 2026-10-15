@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
-import { useNetSplitStore } from '../store/useNetSplitStore';
+import { useNetSplitStore, getOppositeAdapter, getDefaultAdapter } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
-import { WifiIcon, EthernetIcon } from './Icons';
+import { WifiIcon, EthernetIcon, SwapIcon, StarIcon, NetworkIcon } from './Icons';
 import { StatusBadge } from './StatusBadge';
 
 interface BulkActionBarProps {
@@ -33,9 +33,17 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
     (a) => a.type === 'WIFI' || a.type === 'ETHERNET' || a.type === 'CELLULAR'
   );
 
+  const effectiveDefaultId = settings.defaultAdapterId || adapters.find((a) => a.isDefaultRoute)?.id;
+  const defaultAdapter = getDefaultAdapter(adapters, effectiveDefaultId);
+  const oppositeAdapter = getOppositeAdapter(adapters, effectiveDefaultId);
+
   const handleBulkAssign = async (adapterId: string) => {
     setShowAdapterPicker(false);
-    await bulkAssign(adapterId);
+    if (adapterId === 'UNASSIGN') {
+      await bulkUnassign();
+    } else {
+      await bulkAssign(adapterId);
+    }
   };
 
   return (
@@ -124,6 +132,160 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
 
             {/* Adapters List with clear UP / DOWN Network Status */}
             <ScrollView style={styles.adapterList} showsVerticalScrollIndicator={false}>
+              {/* Dynamic Default Adapter Option */}
+              <TouchableOpacity
+                style={[
+                  styles.adapterRow,
+                  {
+                    borderBottomColor: theme.borderSubtle,
+                    backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5',
+                  },
+                ]}
+                onPress={() => handleBulkAssign('DEFAULT_ADAPTER')}
+              >
+                <View
+                  style={[
+                    styles.iconBox,
+                    {
+                      backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.25)' : '#d1fae5',
+                    },
+                  ]}
+                >
+                  <StarIcon size={16} color={themeMode === 'dark' ? '#6ee7b7' : '#059669'} />
+                </View>
+
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text
+                      style={[
+                        styles.adapterName,
+                        { color: themeMode === 'dark' ? '#6ee7b7' : '#047857', fontWeight: '700' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Default Adapter
+                    </Text>
+                    <View
+                      style={{
+                        backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.35)' : '#a7f3d0',
+                        paddingHorizontal: 5,
+                        paddingVertical: 1,
+                        borderRadius: 3,
+                        marginLeft: 6,
+                      }}
+                    >
+                      <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#6ee7b7' : '#047857', fontWeight: '700' }}>
+                        DYNAMIC
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
+                    Dynamically follows default connection (currently: {defaultAdapter?.friendlyName || 'Auto'})
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Dynamic Opposite to Default Adapter Option */}
+              <TouchableOpacity
+                style={[
+                  styles.adapterRow,
+                  {
+                    borderBottomColor: theme.borderSubtle,
+                    backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.12)' : '#f5f3ff',
+                    opacity: hardwareAdapters.length < 2 ? 0.5 : 1,
+                  },
+                ]}
+                disabled={hardwareAdapters.length < 2}
+                onPress={() => handleBulkAssign('OPPOSITE_DEFAULT')}
+              >
+                <View
+                  style={[
+                    styles.iconBox,
+                    {
+                      backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.25)' : '#ede9fe',
+                    },
+                  ]}
+                >
+                  <SwapIcon size={16} color={themeMode === 'dark' ? '#c4b5fd' : '#7c3aed'} />
+                </View>
+
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text
+                      style={[
+                        styles.adapterName,
+                        { color: themeMode === 'dark' ? '#c4b5fd' : '#6d28d9', fontWeight: '700' },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      Opposite to Default Adapter
+                    </Text>
+                    <View
+                      style={{
+                        backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.35)' : '#ddd6fe',
+                        paddingHorizontal: 5,
+                        paddingVertical: 1,
+                        borderRadius: 3,
+                        marginLeft: 6,
+                      }}
+                    >
+                      <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#ddd6fe' : '#5b21b6', fontWeight: '700' }}>
+                        DYNAMIC
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
+                    {hardwareAdapters.length >= 2
+                      ? `Dynamically follows non-default connection (currently: ${oppositeAdapter?.friendlyName || 'Secondary'})`
+                      : 'Requires at least 2 network adapters'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Windows Default (Unassigned) option */}
+              <TouchableOpacity
+                style={[
+                  styles.adapterRow,
+                  {
+                    borderBottomColor: theme.borderSubtle,
+                    backgroundColor: theme.surfaceCard,
+                  },
+                ]}
+                onPress={() => handleBulkAssign('UNASSIGN')}
+              >
+                <View
+                  style={[
+                    styles.iconBox,
+                    {
+                      backgroundColor: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9',
+                    },
+                  ]}
+                >
+                  <NetworkIcon size={16} color={theme.textSecondary} />
+                </View>
+
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text
+                    style={[
+                      styles.adapterName,
+                      { color: theme.textPrimary, fontWeight: '600' },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    Windows Default (Unassigned)
+                  </Text>
+                  <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
+                    Remove rule and follow normal OS route metric
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <View style={{ paddingHorizontal: spacing.sm, paddingTop: 10, paddingBottom: 4 }}>
+                <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.5 }}>
+                  SPECIFIC HARDWARE ADAPTERS
+                </Text>
+              </View>
+
               {hardwareAdapters.map((a) => {
                 const isUp = a.status === 'UP';
                 const isDefault =

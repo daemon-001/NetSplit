@@ -60,6 +60,8 @@ export interface ApplicationInfo {
   groupMemberPaths?: string[];
   assignedAdapterId?: string;
   assignedAdapterName?: string;
+  isOppositeDefault?: boolean;
+  isFollowDefault?: boolean;
   ruleStatus: RuleEnforcementStatus;
   lastError?: string;
 }
@@ -73,6 +75,8 @@ export interface RoutingRule {
   executablePath: string;
   adapterId: string;
   adapterName: string;
+  isOppositeDefault?: boolean;
+  isFollowDefault?: boolean;
   enabled: boolean;
   fallbackMode: FallbackPolicy;
   status: RuleEnforcementStatus;

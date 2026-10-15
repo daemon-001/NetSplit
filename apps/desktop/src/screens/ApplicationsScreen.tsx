@@ -443,6 +443,8 @@ export const ApplicationsScreen: React.FC = () => {
                   applicationId={item.id}
                   assignedAdapterId={item.assignedAdapterId}
                   assignedAdapterName={item.assignedAdapterName}
+                  isOppositeDefault={item.isOppositeDefault}
+                  isFollowDefault={item.isFollowDefault}
                 />
               </View>
 

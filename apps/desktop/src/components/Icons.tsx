@@ -109,6 +109,27 @@ export const ChevronDownIcon: React.FC<IconProps> = ({ size = 12, color = '#8888
   </View>
 );
 
+export const SwapIcon: React.FC<IconProps> = ({ size = 14, color = '#ffffff' }) => (
+  <View style={[styles.center, { width: size, height: size }]}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', width: size * 0.85, marginBottom: 2 }}>
+      <View style={{ flex: 1, height: 1.5, backgroundColor: color }} />
+      <View style={{ width: 3.5, height: 3.5, borderTopWidth: 1.5, borderRightWidth: 1.5, borderColor: color, transform: [{ rotate: '45deg' }] }} />
+    </View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', width: size * 0.85 }}>
+      <View style={{ width: 3.5, height: 3.5, borderBottomWidth: 1.5, borderLeftWidth: 1.5, borderColor: color, transform: [{ rotate: '45deg' }] }} />
+      <View style={{ flex: 1, height: 1.5, backgroundColor: color }} />
+    </View>
+  </View>
+);
+
+export const StarIcon: React.FC<IconProps> = ({ size = 14, color = '#ffffff' }) => (
+  <View style={[styles.center, { width: size, height: size }]}>
+    <View style={{ width: size * 0.75, height: size * 0.75, borderRadius: 2, borderWidth: 1.5, borderColor: color, transform: [{ rotate: '45deg' }], alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: color }} />
+    </View>
+  </View>
+);
+
 const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
