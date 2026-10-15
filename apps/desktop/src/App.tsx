@@ -10,6 +10,7 @@ import { NetworkAdaptersScreen } from './screens/NetworkAdaptersScreen';
 import { RoutingRulesScreen } from './screens/RoutingRulesScreen';
 import { ActivityScreen } from './screens/ActivityScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { defaultIpcClient } from './services/ipcClient';
 
 export const App: React.FC = () => {
   const currentScreen = useNetSplitStore((state) => state.currentScreen);

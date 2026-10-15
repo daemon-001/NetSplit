@@ -46,6 +46,7 @@ export class IpcClient {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Connection': 'close',
     };
 
     if (this.token) {

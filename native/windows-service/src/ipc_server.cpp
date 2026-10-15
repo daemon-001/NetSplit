@@ -359,6 +359,7 @@ void IpcServer::HandleClient(SOCKET clientSock) {
             "Access-Control-Allow-Origin: *\r\n"
             "Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n"
             "Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With\r\n"
+            "Connection: close\r\n"
             "Content-Length: 0\r\n\r\n";
         send(clientSock, resp.c_str(), (int)resp.size(), 0);
         closesocket(clientSock);
@@ -405,6 +406,7 @@ void IpcServer::HandleClient(SOCKET clientSock) {
             "HTTP/1.1 401 Unauthorized\r\n"
             "Content-Type: application/json\r\n"
             "Access-Control-Allow-Origin: *\r\n"
+            "Connection: close\r\n"
             "Content-Length: " + std::to_string(errBody.size()) + "\r\n\r\n" + errBody;
         send(clientSock, resp.c_str(), (int)resp.size(), 0);
         closesocket(clientSock);
@@ -418,6 +420,7 @@ void IpcServer::HandleClient(SOCKET clientSock) {
         "Content-Type: application/json\r\n"
         "Access-Control-Allow-Origin: *\r\n"
         "Access-Control-Allow-Headers: *\r\n"
+        "Connection: close\r\n"
         "Content-Length: " + std::to_string(jsonResponse.size()) + "\r\n\r\n" + jsonResponse;
 
     send(clientSock, httpResp.c_str(), (int)httpResp.size(), 0);

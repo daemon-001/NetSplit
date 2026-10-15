@@ -282,19 +282,33 @@ ipcMain.handle('uninstall-service', async () => {
   return { success: true };
 });
 
+let cachedWindows = [];
+let lastWindowFetchTime = 0;
+
 ipcMain.handle('get-visible-windows', async () => {
+  const now = Date.now();
+  if (cachedWindows.length > 0 && now - lastWindowFetchTime < 30000) {
+    return cachedWindows;
+  }
+
   try {
     if (desktopCapturer && typeof desktopCapturer.getSources === 'function') {
-      const sources = await desktopCapturer.getSources({ types: ['window'], fetchWindowIcons: false });
-      return sources.map((s) => ({
+      const sources = await desktopCapturer.getSources({
+        types: ['window'],
+        fetchWindowIcons: false,
+        thumbnailSize: { width: 0, height: 0 },
+      });
+      cachedWindows = sources.map((s) => ({
         id: s.id,
         name: s.name,
       }));
+      lastWindowFetchTime = now;
+      return cachedWindows;
     }
   } catch (err) {
     console.warn('[Electron] Could not enumerate desktop window sources:', err ? err.message : err);
   }
-  return [];
+  return cachedWindows;
 });
 
 

@@ -5,7 +5,15 @@ import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { WifiIcon, EthernetIcon } from './Icons';
 import { StatusBadge } from './StatusBadge';
 
-export const BulkActionBar: React.FC = () => {
+interface BulkActionBarProps {
+  entityName?: string;
+  showToggleActions?: boolean;
+}
+
+export const BulkActionBar: React.FC<BulkActionBarProps> = ({
+  entityName = 'application',
+  showToggleActions = false,
+}) => {
   const [showAdapterPicker, setShowAdapterPicker] = useState(false);
 
   const themeMode = useNetSplitStore((state) => state.themeMode);
@@ -15,6 +23,7 @@ export const BulkActionBar: React.FC = () => {
   const settings = useNetSplitStore((state) => state.settings);
   const bulkAssign = useNetSplitStore((state) => state.bulkAssign);
   const bulkUnassign = useNetSplitStore((state) => state.bulkUnassign);
+  const bulkToggleRules = useNetSplitStore((state) => state.bulkToggleRules);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -36,7 +45,7 @@ export const BulkActionBar: React.FC = () => {
           <Text style={[styles.countText, { color: '#ffffff' }]}>{selectedAppIds.length}</Text>
         </View>
         <Text style={[styles.infoText, { color: theme.textPrimary }]}>
-          application{selectedAppIds.length > 1 ? 's' : ''} selected
+          {entityName}{selectedAppIds.length > 1 ? 's' : ''} selected
         </Text>
       </View>
 
@@ -48,11 +57,31 @@ export const BulkActionBar: React.FC = () => {
           <Text style={[styles.btnActionText, { color: '#ffffff' }]}>Assign to Adapter...</Text>
         </TouchableOpacity>
 
+        {showToggleActions && (
+          <>
+            <TouchableOpacity
+              style={[styles.btnSecondary, { borderColor: theme.border, backgroundColor: theme.surfaceHover }]}
+              onPress={() => bulkToggleRules(selectedAppIds, true)}
+            >
+              <Text style={[styles.btnSecondaryText, { color: theme.success, fontWeight: '600' }]}>Enable All</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.btnSecondary, { borderColor: theme.border, backgroundColor: theme.surfaceHover }]}
+              onPress={() => bulkToggleRules(selectedAppIds, false)}
+            >
+              <Text style={[styles.btnSecondaryText, { color: theme.warning, fontWeight: '600' }]}>Disable All</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
         <TouchableOpacity
           style={[styles.btnSecondary, { borderColor: theme.border, backgroundColor: theme.surfaceHover }]}
           onPress={() => bulkUnassign()}
         >
-          <Text style={[styles.btnSecondaryText, { color: theme.textSecondary }]}>Remove Assignment</Text>
+          <Text style={[styles.btnSecondaryText, { color: theme.error, fontWeight: '600' }]}>
+            {entityName === 'rule' ? 'Delete Selected' : 'Remove Assignment'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -79,7 +108,7 @@ export const BulkActionBar: React.FC = () => {
             <View style={[styles.modalHeader, { borderBottomColor: theme.borderSubtle }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[styles.pickerTitle, { color: theme.textPrimary }]}>
-                  Assign {selectedAppIds.length} Application{selectedAppIds.length > 1 ? 's' : ''} to:
+                  Assign {selectedAppIds.length} {entityName === 'rule' ? 'Rule' : 'Application'}{selectedAppIds.length > 1 ? 's' : ''} to:
                 </Text>
                 <Text style={[styles.pickerSubtitle, { color: theme.textTertiary }]}>
                   Select network adapter for routed traffic

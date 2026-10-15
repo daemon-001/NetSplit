@@ -4,6 +4,8 @@ import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { StatusBadge } from '../components/StatusBadge';
 import { ShieldIcon, RefreshIcon } from '../components/Icons';
+import { QuickAdapterSelector } from '../components/QuickAdapterSelector';
+import { BulkActionBar } from '../components/BulkActionBar';
 
 export const RoutingRulesScreen: React.FC = () => {
   const themeMode = useNetSplitStore((state) => state.themeMode);
@@ -13,8 +15,36 @@ export const RoutingRulesScreen: React.FC = () => {
   const verifyRules = useNetSplitStore((state) => state.verifyRules);
   const isVerifyingRules = useNetSplitStore((state) => state.isVerifyingRules);
   const setCurrentScreen = useNetSplitStore((state) => state.setCurrentScreen);
+  const searchQuery = useNetSplitStore((state) => state.searchQuery);
+  const selectedAppIds = useNetSplitStore((state) => state.selectedAppIds);
+  const toggleAppSelection = useNetSplitStore((state) => state.toggleAppSelection);
+  const selectAllApps = useNetSplitStore((state) => state.selectAllApps);
+  const clearSelection = useNetSplitStore((state) => state.clearSelection);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
+
+  // Filter rules by topbar search query
+  const filteredRules = rules.filter((r) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      r.applicationName.toLowerCase().includes(q) ||
+      r.executablePath.toLowerCase().includes(q) ||
+      r.adapterName.toLowerCase().includes(q)
+    );
+  });
+
+  const allSelected =
+    filteredRules.length > 0 &&
+    filteredRules.every((r) => selectedAppIds.includes(r.applicationId));
+
+  const handleToggleSelectAll = () => {
+    if (allSelected) {
+      clearSelection();
+    } else {
+      selectAllApps(filteredRules.map((r) => r.applicationId));
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -22,10 +52,10 @@ export const RoutingRulesScreen: React.FC = () => {
       <View style={[styles.headerBanner, { backgroundColor: theme.surfaceCard, borderBottomColor: theme.border }]}>
         <View style={{ flex: 1 }}>
           <Text style={[styles.bannerTitle, { color: theme.textPrimary }]}>
-            Enforced Windows Filtering Platform (WFP) Rules
+            Enforced Windows Filtering Platform (WFP) Rules ({rules.length})
           </Text>
           <Text style={[styles.bannerSubtitle, { color: theme.textSecondary }]}>
-            These rules are actively bound to the Windows network stack. NetSplit will only mark a rule 'Active' when kernel/adapter verification succeeds.
+            These rules are actively bound to the Windows network stack. Select rules to bulk change target adapters or toggle enforcement.
           </Text>
         </View>
 
@@ -42,6 +72,21 @@ export const RoutingRulesScreen: React.FC = () => {
 
       {/* Rules Table Header */}
       <View style={[styles.tableHeader, { backgroundColor: theme.tableHeaderBg, borderBottomColor: theme.border }]}>
+        {/* Select All Checkbox */}
+        <TouchableOpacity style={styles.colCheck} onPress={handleToggleSelectAll} activeOpacity={0.7}>
+          <View
+            style={[
+              styles.checkbox,
+              {
+                borderColor: theme.borderStrong,
+                backgroundColor: allSelected ? theme.accent : 'transparent',
+              },
+            ]}
+          >
+            {allSelected && <Text style={{ color: '#ffffff', fontSize: 10 }}>✓</Text>}
+          </View>
+        </TouchableOpacity>
+
         <View style={styles.colApp}>
           <Text style={[styles.colHeaderText, { color: theme.textTertiary }]}>APPLICATION & BINARY PATH</Text>
         </View>
@@ -61,88 +106,120 @@ export const RoutingRulesScreen: React.FC = () => {
 
       {/* Rules List */}
       <FlatList
-        data={rules}
+        data={filteredRules}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              styles.tableRow,
-              {
-                backgroundColor: theme.surfaceCard,
-                borderBottomColor: theme.borderSubtle,
-              },
-            ]}
-          >
-            {/* App info */}
-            <View style={styles.colApp}>
-              <Text style={[styles.appName, { color: theme.textPrimary }]}>
-                {item.applicationName}
-              </Text>
-              <Text style={[styles.appPath, { color: theme.textTertiary }]} numberOfLines={1}>
-                {item.executablePath}
-              </Text>
-            </View>
+        renderItem={({ item }) => {
+          const isSelected = selectedAppIds.includes(item.applicationId);
 
-            {/* Target Adapter */}
-            <View style={styles.colAdapter}>
-              <Text style={[styles.adapterName, { color: theme.textPrimary }]}>
-                {item.adapterName}
-              </Text>
-              <Text style={[styles.fallbackText, { color: theme.textTertiary }]}>
-                Fallback: {item.fallbackMode === 'BLOCK' ? 'Drop / Kill-Switch' : 'Windows Default'}
-              </Text>
-            </View>
-
-            {/* Toggle */}
-            <View style={styles.colEnabled}>
-              <Switch
-                value={item.enabled}
-                onValueChange={(val) => toggleRule(item.id, val)}
-                trackColor={{ false: theme.surfaceHover, true: theme.accent }}
-              />
-            </View>
-
-            {/* Status */}
-            <View style={styles.colStatus}>
-              <StatusBadge status={item.status} />
-              {item.lastError && (
-                <Text style={[styles.errorDetail, { color: theme.error }]} numberOfLines={1}>
-                  {item.lastError}
-                </Text>
-              )}
-            </View>
-
-            {/* Actions */}
-            <View style={styles.colActions}>
+          return (
+            <View
+              style={[
+                styles.tableRow,
+                {
+                  backgroundColor: isSelected ? theme.tableRowSelected : theme.surfaceCard,
+                  borderBottomColor: theme.borderSubtle,
+                },
+              ]}
+            >
+              {/* Checkbox for Bulk Selection */}
               <TouchableOpacity
-                style={[styles.removeBtn, { backgroundColor: theme.surfaceHover }]}
-                onPress={() => removeAssignment(item.applicationId)}
+                style={styles.colCheck}
+                onPress={() => toggleAppSelection(item.applicationId)}
+                activeOpacity={0.7}
               >
-                <Text style={{ color: theme.error, fontSize: 11 }}>Delete</Text>
+                <View
+                  style={[
+                    styles.checkbox,
+                    {
+                      borderColor: theme.borderStrong,
+                      backgroundColor: isSelected ? theme.accent : 'transparent',
+                    },
+                  ]}
+                >
+                  {isSelected && <Text style={{ color: '#ffffff', fontSize: 10 }}>✓</Text>}
+                </View>
               </TouchableOpacity>
+
+              {/* App info */}
+              <View style={styles.colApp}>
+                <Text style={[styles.appName, { color: theme.textPrimary }]} numberOfLines={1}>
+                  {item.applicationName}
+                </Text>
+                <Text style={[styles.appPath, { color: theme.textTertiary }]} numberOfLines={1}>
+                  {item.executablePath}
+                </Text>
+              </View>
+
+              {/* Target Adapter Dropdown Selector */}
+              <View style={styles.colAdapter}>
+                <QuickAdapterSelector
+                  applicationId={item.applicationId}
+                  assignedAdapterId={item.adapterId}
+                  assignedAdapterName={item.adapterName}
+                />
+                <Text style={[styles.fallbackText, { color: theme.textTertiary }]} numberOfLines={1}>
+                  Fallback: {item.fallbackMode === 'BLOCK' ? 'Drop / Kill-Switch' : 'Windows Default'}
+                </Text>
+              </View>
+
+              {/* Toggle Enable/Disable */}
+              <View style={styles.colEnabled}>
+                <Switch
+                  value={item.enabled}
+                  onValueChange={(val) => toggleRule(item.id, val)}
+                  trackColor={{ false: theme.surfaceHover, true: theme.accent }}
+                />
+              </View>
+
+              {/* Status */}
+              <View style={styles.colStatus}>
+                <StatusBadge status={item.status} />
+                {item.lastError && (
+                  <Text style={[styles.errorDetail, { color: theme.error }]} numberOfLines={1}>
+                    {item.lastError}
+                  </Text>
+                )}
+              </View>
+
+              {/* Actions */}
+              <View style={styles.colActions}>
+                <TouchableOpacity
+                  style={[styles.removeBtn, { backgroundColor: theme.surfaceHover }]}
+                  onPress={() => removeAssignment(item.applicationId)}
+                >
+                  <Text style={{ color: theme.error, fontSize: 11, fontWeight: '600' }}>Delete</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <ShieldIcon size={36} color={theme.textTertiary} />
             <Text style={[styles.emptyTitle, { color: theme.textPrimary, marginTop: 12 }]}>
-              No active routing rules
+              {searchQuery ? 'No matching routing rules found' : 'No active routing rules'}
             </Text>
             <Text style={[styles.emptySubtitle, { color: theme.textTertiary }]}>
-              Assign applications to network adapters in the Applications tab to create rules.
+              {searchQuery
+                ? 'Try clearing your search query in the top bar.'
+                : 'Assign applications to network adapters in the Applications tab to create rules.'}
             </Text>
-            <TouchableOpacity
-              style={[styles.addFirstBtn, { backgroundColor: theme.accent, marginTop: 16 }]}
-              onPress={() => setCurrentScreen('apps')}
-            >
-              <Text style={{ color: '#ffffff', fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold }}>
-                Go to Applications
-              </Text>
-            </TouchableOpacity>
+            {!searchQuery && (
+              <TouchableOpacity
+                style={[styles.addFirstBtn, { backgroundColor: theme.accent, marginTop: 16 }]}
+                onPress={() => setCurrentScreen('apps')}
+              >
+                <Text style={{ color: '#ffffff', fontSize: typography.sizes.xs, fontWeight: typography.weights.semibold }}>
+                  Go to Applications
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         }
       />
+
+      {/* Floating Bulk Action Bar */}
+      <BulkActionBar entityName="rule" showToggleActions={true} />
     </View>
   );
 };
@@ -150,6 +227,7 @@ export const RoutingRulesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    position: 'relative',
   },
   headerBanner: {
     paddingHorizontal: spacing.xl,
@@ -187,6 +265,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
   },
+  colCheck: {
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 4,
+  },
+  checkbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 3,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   colHeaderText: {
     fontFamily: typography.fontFamily,
     fontSize: 10,
@@ -197,7 +289,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
   },
   colApp: {
@@ -215,17 +307,14 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   colAdapter: {
-    flex: 2,
-  },
-  adapterName: {
-    fontFamily: typography.fontFamily,
-    fontSize: typography.sizes.xs,
-    fontWeight: typography.weights.medium,
+    flex: 2.3,
+    paddingRight: spacing.md,
+    justifyContent: 'center',
   },
   fallbackText: {
     fontFamily: typography.fontFamily,
     fontSize: 10,
-    marginTop: 2,
+    marginTop: 4,
   },
   colEnabled: {
     width: 80,
