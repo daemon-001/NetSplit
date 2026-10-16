@@ -36,37 +36,33 @@ function getScriptPath(scriptName) {
 }
 
 function getToken() {
-  const localAppData = process.env.LOCALAPPDATA || '';
   const programData = process.env.PROGRAMDATA || 'C:\\ProgramData';
+  const localAppData = process.env.LOCALAPPDATA || '';
   
-  const localTokenPath = path.join(localAppData, 'NetSplit', 'ipc_auth.token');
   const progTokenPath = path.join(programData, 'NetSplit', 'ipc_auth.token');
+  const localTokenPath = path.join(localAppData, 'NetSplit', 'ipc_auth.token');
 
-  const candidates = [];
-  if (fs.existsSync(localTokenPath)) {
-    try {
-      const stat = fs.statSync(localTokenPath);
-      const token = fs.readFileSync(localTokenPath, 'utf8').trim();
-      if (token && token.length === 64) {
-        candidates.push({ token, mtime: stat.mtimeMs });
-      }
-    } catch {}
-  }
-
+  // ProgramData is the primary system token path used by the Windows Service
   if (fs.existsSync(progTokenPath)) {
     try {
-      const stat = fs.statSync(progTokenPath);
       const token = fs.readFileSync(progTokenPath, 'utf8').trim();
       if (token && token.length === 64) {
-        candidates.push({ token, mtime: stat.mtimeMs });
+        return token;
       }
     } catch {}
   }
 
-  if (candidates.length === 0) return null;
-  // Sort descending by mtime so the most freshly generated token is always preferred
-  candidates.sort((a, b) => b.mtime - a.mtime);
-  return candidates[0].token;
+  // Fallback to local app data
+  if (fs.existsSync(localTokenPath)) {
+    try {
+      const token = fs.readFileSync(localTokenPath, 'utf8').trim();
+      if (token && token.length === 64) {
+        return token;
+      }
+    } catch {}
+  }
+
+  return null;
 }
 
 function checkServiceHealth() {
@@ -104,8 +100,16 @@ function checkProcessRunning(exeName) {
 }
 
 async function ensureServiceRunning() {
+  const notifyRenderer = () => {
+    const freshToken = getToken();
+    if (freshToken && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('service-restarted', { token: freshToken });
+    }
+  };
+
   if (await checkServiceHealth()) {
     console.log('[Electron] NetSplitService is healthy and responding on port 48192.');
+    notifyRenderer();
     return;
   }
 
@@ -130,10 +134,11 @@ async function ensureServiceRunning() {
       });
     } catch {}
 
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 15; i++) {
       await new Promise((r) => setTimeout(r, 400));
       if (await checkServiceHealth()) {
         console.log('[Electron] NetSplitService started via Windows Service.');
+        notifyRenderer();
         return;
       }
     }

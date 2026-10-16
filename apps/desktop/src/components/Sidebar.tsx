@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNetSplitStore, ScreenType } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
-import appIcon from '../assets/icon.png';
 import {
   OverviewIcon,
   AppsIcon,
@@ -57,23 +56,6 @@ export const Sidebar: React.FC = () => {
         },
       ]}
     >
-      {/* Brand Header */}
-      <View style={styles.header}>
-        <View style={styles.logoRow}>
-          <Image
-            source={{ uri: appIcon }}
-            style={{ width: 22, height: 22, borderRadius: 4 }}
-            resizeMode="contain"
-          />
-          {!collapsed && (
-            <View style={{ marginLeft: 10 }}>
-              <Text style={[styles.brandTitle, { color: theme.textPrimary }]}>NetSplit</Text>
-              <Text style={[styles.brandSubtitle, { color: theme.textTertiary }]}>Windows Network Utility</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
       {/* Navigation List */}
       <View style={styles.navList}>
         {navItems.map((item) => {
@@ -174,29 +156,10 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     justifyContent: 'space-between',
   },
-  header: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
-  },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  brandTitle: {
-    fontFamily: typography.fontFamilyDisplay,
-    fontSize: typography.sizes.md,
-    fontWeight: typography.weights.bold,
-    letterSpacing: 0.3,
-  },
-  brandSubtitle: {
-    fontFamily: typography.fontFamily,
-    fontSize: 10,
-    marginTop: 1,
-  },
   navList: {
     flex: 1,
     paddingHorizontal: spacing.sm,
-    paddingTop: spacing.xs,
+    paddingTop: spacing.md,
   },
   navItem: {
     flexDirection: 'row',

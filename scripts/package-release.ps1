@@ -9,6 +9,21 @@ Write-Host "====================================================================
 Write-Host "   NetSplit - Automated Release Builder & Packager                  " -ForegroundColor Cyan
 Write-Host "====================================================================" -ForegroundColor Cyan
 
+# 0. Gracefully stop any running service or process holding DLLs
+try {
+    $tokenPath = "$env:ProgramData\NetSplit\ipc_auth.token"
+    if (Test-Path $tokenPath) {
+        $token = (Get-Content $tokenPath -Raw).Trim()
+        $body = '{"jsonrpc":"2.0","id":"rel-shut","method":"system.shutdown"}'
+        Invoke-RestMethod -Uri "http://127.0.0.1:48192" -Method Post -Headers @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" } -Body $body -TimeoutSec 2 -ErrorAction SilentlyContinue | Out-Null
+        Start-Sleep -Milliseconds 400
+    }
+} catch {}
+
+Stop-Service -Name "NetSplitService" -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -in @('NetSplit.exe', 'NetSplitService.exe') } | Invoke-CimMethod -MethodName Terminate -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 600
+
 # 1. Compile C++ Windows Service & Router DLLs
 Write-Host "`n[1/5] Compiling native Windows Service & Router DLLs..." -ForegroundColor Yellow
 & cmd.exe /c "native\windows-service\build.bat"
@@ -122,9 +137,13 @@ Copy-Item "$rootDir\scripts\elevate-service.ps1" "$releaseDir\scripts\"
 $installedSvc = Get-Service -Name "NetSplitService" -ErrorAction SilentlyContinue
 if ($installedSvc) {
     Write-Host "Updating and starting NetSplitService Windows Service..." -ForegroundColor Yellow
-    $svcExe = "$releaseDir\native\windows-service\NetSplitService.exe"
     & sc.exe config NetSplitService binPath= "`"$svcExe`" --run-service" start= auto >$null 2>&1
     & sc.exe start NetSplitService >$null 2>&1
+    for ($i = 0; $i -lt 15; $i++) {
+        Start-Sleep -Milliseconds 300
+        $conn = Get-NetTCPConnection -LocalPort 48192 -State Listen -ErrorAction SilentlyContinue
+        if ($conn) { break }
+    }
 }
 
 # Create zip archive

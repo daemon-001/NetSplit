@@ -71,6 +71,21 @@ export const OverviewScreen: React.FC = () => {
     setInstallError(null);
     setInstallSuccess(null);
     try {
+      // 1. If service is already running, try connecting with fresh token directly
+      const freshToken = await (window as any).netSplitHost?.getToken?.();
+      if (freshToken) {
+        defaultIpcClient.setToken(freshToken);
+        const status = await defaultIpcClient.getStatus().catch(() => null);
+        if (status) {
+          setLocalIsServiceInstalled(true);
+          useNetSplitStore.setState({ isServiceInstalled: true, serviceConnected: true });
+          await refreshAll();
+          setInstallSuccess('NetSplit Windows Service is active.');
+          setIsInstalling(false);
+          return;
+        }
+      }
+
       let res;
       if (isServiceInstalled) {
         res = await (window as any).netSplitHost?.elevateService?.();
@@ -79,11 +94,13 @@ export const OverviewScreen: React.FC = () => {
       }
       if (res?.token) {
         defaultIpcClient.setToken(res.token);
+        setLocalIsServiceInstalled(true);
+        useNetSplitStore.setState({ isServiceInstalled: true, serviceConnected: true });
+        await refreshAll();
+        setInstallSuccess('NetSplit Windows Service is active.');
+      } else {
+        throw new Error('Service did not respond. Please ensure Administrator permission was granted.');
       }
-      setLocalIsServiceInstalled(true);
-      useNetSplitStore.setState({ isServiceInstalled: true, serviceConnected: true });
-      await refreshAll();
-      setInstallSuccess('NetSplit Windows Service is active.');
     } catch (e: any) {
       console.warn('Start/install service error:', e);
       setInstallError(e?.message || 'Failed to start service. Please ensure administrator access was granted.');

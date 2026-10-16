@@ -316,7 +316,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     get().fetchVisibleWindows().catch(() => {});
 
     try {
-      if (!defaultIpcClient.getToken() && typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { getToken: () => Promise<string | null> } }).netSplitHost?.getToken) {
+      if ((!get().serviceConnected || !defaultIpcClient.getToken()) && typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { getToken: () => Promise<string | null> } }).netSplitHost?.getToken) {
         const token = await (window as unknown as { netSplitHost: { getToken: () => Promise<string | null> } }).netSplitHost.getToken();
         if (token) {
           defaultIpcClient.setToken(token);
@@ -433,10 +433,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     }
   },
 
-  assignApp: async (appId: string, adapterId: string, fallbackMode?: FallbackPolicy) => {
+  assignApp: async (appId: string, adapterId: string, fallbackMode: FallbackPolicy = 'WINDOWS_DEFAULT') => {
     const { apps, adapters, rules, settings, oppositeDefaultAppIds, followDefaultAppIds } = get();
-    const effectiveFallback: FallbackPolicy =
-      fallbackMode || (settings.adapterDisconnectBehavior === 'BLOCK' ? 'BLOCK' : 'WINDOWS_DEFAULT');
     const app = apps.find((a) => a.id === appId);
     if (!app) return;
 
@@ -471,7 +469,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       : followDefaultAppIds.filter((id) => id !== appId);
     saveFollowDefaultApps(nextFollowIds);
 
-    const isMerged = isOpposite ? isOppositeAdapterMerged(adapters, effectiveDefaultId) : (effectiveFallback !== 'BLOCK');
+    const isMerged = isOpposite ? isOppositeAdapterMerged(adapters, effectiveDefaultId) : false;
 
     // 1. Optimistic update immediately for instant UI feedback
     const prevApps = apps;
@@ -486,7 +484,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             isOppositeDefault: isOpposite,
             isFollowDefault: isFollow,
             isMerged,
-            fallbackMode: effectiveFallback,
+            fallbackMode,
             ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
           }
         : a
@@ -504,7 +502,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       isFollowDefault: isFollow,
       isMerged,
       enabled: true,
-      fallbackMode: effectiveFallback,
+      fallbackMode,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -531,7 +529,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
         executablePath: app.executablePath,
         applicationName: app.name,
         adapterId: adapter.id,
-        fallbackMode: effectiveFallback,
+        fallbackMode,
       });
       get().refreshAll(false).catch(() => {});
     } catch (err: unknown) {

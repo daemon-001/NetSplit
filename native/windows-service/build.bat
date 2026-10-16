@@ -8,13 +8,13 @@ REM Handle temporarily locked DLLs by moving them if needed
 if exist native\windows-service\NetSplitRouter.dll (
     del /f /q native\windows-service\NetSplitRouter.dll >nul 2>&1
     if exist native\windows-service\NetSplitRouter.dll (
-        move /y native\windows-service\NetSplitRouter.dll native\windows-service\NetSplitRouter.dll.old >nul 2>&1
+        move /y native\windows-service\NetSplitRouter.dll native\windows-service\NetSplitRouter_%RANDOM%.dll.bak >nul 2>&1
     )
 )
 if exist native\windows-service\NetSplitRouter32.dll (
     del /f /q native\windows-service\NetSplitRouter32.dll >nul 2>&1
     if exist native\windows-service\NetSplitRouter32.dll (
-        move /y native\windows-service\NetSplitRouter32.dll native\windows-service\NetSplitRouter32.dll.old >nul 2>&1
+        move /y native\windows-service\NetSplitRouter32.dll native\windows-service\NetSplitRouter32_%RANDOM%.dll.bak >nul 2>&1
     )
 )
 
