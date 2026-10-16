@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { SearchIcon, RefreshIcon } from './Icons';
@@ -14,6 +14,8 @@ export const TopBar: React.FC = () => {
   const isLoading = useNetSplitStore((state) => state.isLoading);
   const adapters = useNetSplitStore((state) => state.adapters);
   const rules = useNetSplitStore((state) => state.rules);
+  const isEngineEnabled = useNetSplitStore((state) => state.isEngineEnabled);
+  const toggleMasterEngine = useNetSplitStore((state) => state.toggleMasterEngine);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -73,6 +75,52 @@ export const TopBar: React.FC = () => {
 
       {/* Actions & Metrics */}
       <View style={styles.actionsSection}>
+        {/* Top Master Switch - Enables/Disables Working of the App */}
+        <View
+          style={[
+            styles.masterSwitchContainer,
+            {
+              backgroundColor: theme.surfaceSubtle,
+              borderColor: isEngineEnabled
+                ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.4)' : '#6ee7b7')
+                : theme.border,
+            },
+          ]}
+        >
+          <Switch
+            value={isEngineEnabled}
+            onValueChange={(val) => toggleMasterEngine(val)}
+            trackColor={{
+              false: theme.surfaceHover,
+              true: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.45)' : '#6ee7b7',
+            }}
+            thumbColor={
+              isEngineEnabled
+                ? theme.success
+                : (themeMode === 'dark' ? '#94a3b8' : '#cbd5e1')
+            }
+            style={styles.switchControl}
+          />
+          <TouchableOpacity
+            onPress={() => toggleMasterEngine()}
+            activeOpacity={0.7}
+            style={styles.masterSwitchLabelBtn}
+          >
+            <Text
+              style={[
+                styles.masterSwitchLabel,
+                {
+                  color: isEngineEnabled
+                    ? (themeMode === 'dark' ? '#34d399' : '#059669')
+                    : theme.textTertiary,
+                },
+              ]}
+            >
+              {isEngineEnabled ? '⚡ Active' : '⏸ Paused'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Quick telemetry indicators */}
         <View style={[styles.metricPill, { backgroundColor: theme.surfaceSubtle, borderColor: theme.borderSubtle }]}>
           <Text style={[styles.metricLabel, { color: theme.textTertiary }]}>Adapters:</Text>
@@ -81,7 +129,14 @@ export const TopBar: React.FC = () => {
 
         <View style={[styles.metricPill, { backgroundColor: theme.surfaceSubtle, borderColor: theme.borderSubtle }]}>
           <Text style={[styles.metricLabel, { color: theme.textTertiary }]}>Rules:</Text>
-          <Text style={[styles.metricValue, { color: theme.accent }]}>{activeRulesCount} Active</Text>
+          <Text
+            style={[
+              styles.metricValue,
+              { color: isEngineEnabled ? theme.accent : theme.textTertiary },
+            ]}
+          >
+            {isEngineEnabled ? `${activeRulesCount} Active` : `${rules.length} Paused`}
+          </Text>
         </View>
 
         {/* Refresh Action */}
@@ -151,6 +206,30 @@ const styles = StyleSheet.create({
   actionsSection: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  masterSwitchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 4,
+    paddingRight: 8,
+    height: 32,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginRight: 8,
+  },
+  switchControl: {
+    transform: [{ scaleX: 0.75 }, { scaleY: 0.75 }],
+    marginRight: 2,
+  },
+  masterSwitchLabelBtn: {
+    paddingVertical: 2,
+    paddingHorizontal: 2,
+  },
+  masterSwitchLabel: {
+    fontFamily: typography.fontFamily,
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.3,
   },
   metricPill: {
     flexDirection: 'row',

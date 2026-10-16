@@ -23,6 +23,8 @@ export const RoutingRulesScreen: React.FC = () => {
   const toggleAppSelection = useNetSplitStore((state) => state.toggleAppSelection);
   const selectAllApps = useNetSplitStore((state) => state.selectAllApps);
   const clearSelection = useNetSplitStore((state) => state.clearSelection);
+  const isEngineEnabled = useNetSplitStore((state) => state.isEngineEnabled);
+  const toggleMasterEngine = useNetSplitStore((state) => state.toggleMasterEngine);
 
   // Filter tabs and sorting state
   const [ruleFilter, setRuleFilter] = useState<string>('all');
@@ -213,6 +215,36 @@ export const RoutingRulesScreen: React.FC = () => {
           <Text style={[styles.addBtnText, { color: '#ffffff' }]}>+ Add Rule</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Master Engine Paused Notice Banner */}
+      {!isEngineEnabled && (
+        <View
+          style={[
+            styles.masterPausedBanner,
+            {
+              backgroundColor: themeMode === 'dark' ? 'rgba(51, 65, 85, 0.4)' : '#f1f5f9',
+              borderColor: theme.border,
+            },
+          ]}
+        >
+          <Text style={{ fontSize: 13, marginRight: 8 }}>⏸</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.masterPausedTitle, { color: theme.textPrimary }]}>
+              NetSplit Routing Engine Paused
+            </Text>
+            <Text style={[styles.masterPausedSubtitle, { color: theme.textTertiary }]}>
+              All routing rules are currently bypassed. Applications are using standard Windows default network routes.
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.resumeBtn, { backgroundColor: theme.accent }]}
+            onPress={() => toggleMasterEngine(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.resumeBtnText}>⚡ Enable Engine</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Rules Table Header with Clickable Arrow Sort Filters */}
       <View style={[styles.tableHeader, { backgroundColor: theme.tableHeaderBg, borderBottomColor: theme.border }]}>
@@ -666,5 +698,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: radii.sm,
+  },
+  masterPausedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+  },
+  masterPausedTitle: {
+    fontFamily: typography.fontFamilyDisplay,
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
+  },
+  masterPausedSubtitle: {
+    fontFamily: typography.fontFamily,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  resumeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+    marginLeft: 12,
+  },
+  resumeBtnText: {
+    color: '#ffffff',
+    fontFamily: typography.fontFamily,
+    fontSize: 11,
+    fontWeight: typography.weights.bold,
   },
 });

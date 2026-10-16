@@ -62,6 +62,30 @@ export const saveFollowDefaultApps = (appIds: string[]) => {
   }
 };
 
+const MASTER_ENGINE_STORAGE_KEY = 'netsplit_master_engine_enabled';
+
+export const loadMasterEngineEnabled = (): boolean => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem(MASTER_ENGINE_STORAGE_KEY);
+      if (stored !== null) return stored === 'true';
+    }
+  } catch (e) {
+    // ignore
+  }
+  return true;
+};
+
+export const saveMasterEngineEnabled = (enabled: boolean) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(MASTER_ENGINE_STORAGE_KEY, enabled ? 'true' : 'false');
+    }
+  } catch (e) {
+    // ignore
+  }
+};
+
 export const getDefaultAdapter = (
   adapters: NetworkAdapter[],
   defaultAdapterId?: string
@@ -136,6 +160,8 @@ interface NetSplitState {
   settings: GlobalSettings;
   oppositeDefaultAppIds: string[];
   followDefaultAppIds: string[];
+  isEngineEnabled: boolean;
+  pausedRuleIds: string[];
 
   // Search & Filters
   searchQuery: string;
@@ -171,6 +197,7 @@ interface NetSplitState {
   addManualApp: (path: string, customName?: string) => Promise<boolean>;
   updateSettings: (settings: Partial<GlobalSettings>) => Promise<void>;
   setDefaultAdapter: (adapterId: string, policy?: 'WINDOWS_DEFAULT' | 'PREFER_ADAPTER') => Promise<void>;
+  toggleMasterEngine: (enabled?: boolean) => Promise<void>;
 }
 
 export const useNetSplitStore = create<NetSplitState>((set, get) => ({
@@ -196,6 +223,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
   oppositeDefaultAppIds: loadOppositeDefaultApps(),
   followDefaultAppIds: loadFollowDefaultApps(),
+  isEngineEnabled: loadMasterEngineEnabled(),
+  pausedRuleIds: [],
 
   searchQuery: '',
   appFilter: 'all',
@@ -321,6 +350,10 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       set((state) => ({
         serviceConnected: status !== null,
         systemStatus: status,
+        isEngineEnabled:
+          status?.routingEngineEnabled !== undefined
+            ? status.routingEngineEnabled
+            : state.isEngineEnabled,
         adapters: adapters.length > 0 ? adapters : state.adapters,
         apps: appsWithDynamic,
         rules: rules,
@@ -1071,5 +1104,52 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
         window.alert(msg);
       }
     }
+  },
+
+  toggleMasterEngine: async (overrideEnabled) => {
+    const current = get().isEngineEnabled;
+    const target = overrideEnabled !== undefined ? overrideEnabled : !current;
+    const { rules } = get();
+
+    // 1. Optimistic update
+    saveMasterEngineEnabled(target);
+    if (!target) {
+      const activeIds = rules.filter((r) => r.enabled).map((r) => r.id);
+      set({
+        isEngineEnabled: false,
+        pausedRuleIds: activeIds,
+        lastError: null,
+      });
+    } else {
+      set({
+        isEngineEnabled: true,
+        lastError: null,
+      });
+    }
+
+    // 2. Notify backend service via IPC
+    try {
+      await defaultIpcClient.toggleEngine(target);
+    } catch (err: unknown) {
+      console.warn('IPC engine.toggle call failed, applying fallback rule toggling:', err);
+      if (!target) {
+        for (const rule of rules) {
+          if (rule.enabled) {
+            await defaultIpcClient.toggleRule(rule.id, false).catch(() => {});
+          }
+        }
+      } else {
+        const { pausedRuleIds } = get();
+        for (const rule of rules) {
+          if (pausedRuleIds.length === 0 || pausedRuleIds.includes(rule.id)) {
+            await defaultIpcClient.toggleRule(rule.id, true).catch(() => {});
+          }
+        }
+        set({ pausedRuleIds: [] });
+      }
+    }
+
+    // 3. Refresh state to stay synchronized
+    get().refreshAll(false).catch(() => {});
   },
 }));

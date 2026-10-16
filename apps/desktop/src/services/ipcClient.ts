@@ -130,6 +130,11 @@ export class IpcClient {
     return this.call<VerifyRulesResult>('rule.verify');
   }
 
+  // Master Engine Switch
+  public async toggleEngine(enabled: boolean): Promise<{ success: boolean; engineEnabled: boolean }> {
+    return this.call<{ success: boolean; engineEnabled: boolean }>('engine.toggle', { enabled });
+  }
+
   // Configuration & Default Adapter
   public async setDefaultAdapter(
     adapterId: string,

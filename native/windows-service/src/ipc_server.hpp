@@ -66,5 +66,6 @@ private:
     std::string HandleSetConfig(const std::string& reqId, const std::string& body);
     std::string HandleSetDefaultAdapter(const std::string& reqId, const std::string& body);
     std::string HandleListActivity(const std::string& reqId);
+    std::string HandleToggleEngine(const std::string& reqId, const std::string& body);
     std::string HandleShutdown(const std::string& reqId);
 };

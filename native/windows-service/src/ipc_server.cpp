@@ -458,6 +458,8 @@ std::string IpcServer::ProcessJsonRpc(const std::string& requestBody) {
         return HandleSetDefaultAdapter(id, requestBody);
     } else if (method == "activity.list") {
         return HandleListActivity(id);
+    } else if (method == "engine.toggle" || method == "engine.setEnabled") {
+        return HandleToggleEngine(id, requestBody);
     } else if (method == "system.shutdown") {
         return HandleShutdown(id);
     }
@@ -488,6 +490,7 @@ std::string IpcServer::HandleGetStatus(const std::string& reqId) {
     ss << "\"uptimeSeconds\":" << (GetTickCount64() / 1000) << ",";
     ss << "\"routingEngineHealth\":\"HEALTHY\",";
     ss << "\"routingEngineMode\":\"WFP_ALE_PROXY\",";
+    ss << "\"routingEngineEnabled\":" << (m_pRoutingEngine->IsEngineSuspended() ? "false" : "true") << ",";
     ss << "\"totalAdapters\":" << adapters.size() << ",";
     ss << "\"activeAdapters\":" << activeAdapters << ",";
     ss << "\"assignedApplicationsCount\":" << rules.size() << ",";
@@ -816,7 +819,8 @@ std::string IpcServer::HandleGetConfig(const std::string& reqId) {
     ss << "\"startWithWindows\":" << (cfg.startWithWindows ? "true" : "false") << ",";
     ss << "\"minimizeToTray\":" << (cfg.minimizeToTray ? "true" : "false") << ",";
     ss << "\"enableAuditLogging\":" << (cfg.enableAuditLogging ? "true" : "false") << ",";
-    ss << "\"themeMode\":\"" << JsonEscape(cfg.themeMode) << "\"";
+    ss << "\"themeMode\":\"" << JsonEscape(cfg.themeMode) << "\",";
+    ss << "\"routingEngineEnabled\":" << (m_pRoutingEngine->IsEngineSuspended() ? "false" : "true");
     ss << "}}";
     return ss.str();
 }
@@ -839,6 +843,13 @@ std::string IpcServer::HandleSetConfig(const std::string& reqId, const std::stri
     cfg.startWithWindows = ExtractJsonBool(body, "startWithWindows", cfg.startWithWindows);
     cfg.minimizeToTray = ExtractJsonBool(body, "minimizeToTray", cfg.minimizeToTray);
     cfg.enableAuditLogging = ExtractJsonBool(body, "enableAuditLogging", cfg.enableAuditLogging);
+
+    if (body.find("\"routingEngineEnabled\"") != std::string::npos) {
+        bool en = ExtractJsonBool(body, "routingEngineEnabled", true);
+        std::string err;
+        if (en) m_pRoutingEngine->ResumeEngine(m_pAssignMgr->GetAllRules(), err);
+        else m_pRoutingEngine->SuspendEngine(err);
+    }
 
     if (policyChanged || adapterChanged) {
         std::string err;
@@ -914,6 +925,19 @@ std::string IpcServer::HandleListActivity(const std::string& reqId) {
     }
     ss << "]}";
     return ss.str();
+}
+
+std::string IpcServer::HandleToggleEngine(const std::string& reqId, const std::string& body) {
+    bool enabled = ExtractJsonBool(body, "enabled", true);
+    std::string err;
+    if (enabled) {
+        m_pRoutingEngine->ResumeEngine(m_pAssignMgr->GetAllRules(), err);
+        LogActivity("INFO", "SYSTEM", "NetSplit Engine Resumed", "Master switch enabled: Network routing rules active");
+    } else {
+        m_pRoutingEngine->SuspendEngine(err);
+        LogActivity("INFO", "SYSTEM", "NetSplit Engine Paused", "Master switch disabled: All traffic bypassed to Windows default routes");
+    }
+    return "{\"jsonrpc\":\"2.0\",\"id\":\"" + reqId + "\",\"result\":{\"success\":true,\"engineEnabled\":" + (enabled ? "true" : "false") + "}}";
 }
 
 std::string IpcServer::HandleShutdown(const std::string& reqId) {

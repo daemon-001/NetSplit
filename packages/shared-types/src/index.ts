@@ -99,6 +99,7 @@ export interface GlobalSettings {
   minimizeToTray: boolean;
   enableAuditLogging: boolean;
   themeMode: 'DARK' | 'LIGHT' | 'SYSTEM';
+  routingEngineEnabled?: boolean;
 }
 
 export type ActivityLevel = 'INFO' | 'WARNING' | 'ERROR' | 'SUCCESS';
@@ -120,6 +121,7 @@ export interface SystemStatus {
   uptimeSeconds: number;
   routingEngineHealth: 'HEALTHY' | 'DEGRADED' | 'STOPPED';
   routingEngineMode: 'WFP_ALE_PROXY' | 'KERNEL_CALLOUT';
+  routingEngineEnabled?: boolean;
   totalAdapters: number;
   activeAdapters: number;
   assignedApplicationsCount: number;

@@ -258,6 +258,10 @@ void WfpRoutingEngine::CloseWfpEngine() {
 
 bool WfpRoutingEngine::ApplyRule(const AssignmentRule& rule, std::string& outError) {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    if (m_engineSuspended) {
+        outError = "NetSplit engine is suspended (master switch OFF)";
+        return false;
+    }
 
     // Find the target adapter
     NetAdapterRecord* pAdapter = m_pAdapterMgr->FindAdapterById(rule.adapterId);
@@ -413,6 +417,50 @@ bool WfpRoutingEngine::RemoveRule(const std::string& ruleId, std::string& outErr
 
     // Reset stale TCP connections so the app returns to default network
     ResetConnectionsForProcessName(baseName);
+    return true;
+}
+
+bool WfpRoutingEngine::SuspendEngine(std::string& outError) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    m_engineSuspended = true;
+
+    // Delete all active kernel WFP filters
+    if (m_engineHandle) {
+        for (auto& kv : m_appliedRules) {
+            if (kv.second.filterId != 0) {
+                FwpmFilterDeleteById0(m_engineHandle, kv.second.filterId);
+                kv.second.filterId = 0;
+            }
+        }
+    }
+
+    // Collect baseNames before clearing so we can reset connections back to Windows default
+    std::vector<std::wstring> baseNames;
+    for (const auto& kv : m_appliedRules) {
+        std::wstring exe = kv.second.executablePath;
+        size_t slash = exe.find_last_of(L"\\/");
+        baseNames.push_back((slash != std::wstring::npos) ? exe.substr(slash + 1) : exe);
+    }
+
+    m_appliedRules.clear();
+    UpdateSharedTable();
+
+    for (const auto& bn : baseNames) {
+        ResetConnectionsForProcessName(bn);
+    }
+    return true;
+}
+
+bool WfpRoutingEngine::ResumeEngine(const std::vector<AssignmentRule>& rules, std::string& outError) {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    m_engineSuspended = false;
+
+    for (const auto& r : rules) {
+        if (r.enabled) {
+            std::string applyErr;
+            ApplyRule(r, applyErr);
+        }
+    }
     return true;
 }
 

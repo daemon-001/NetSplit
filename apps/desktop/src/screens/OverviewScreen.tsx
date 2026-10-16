@@ -15,6 +15,8 @@ export const OverviewScreen: React.FC = () => {
   const setCurrentScreen = useNetSplitStore((state) => state.setCurrentScreen);
   const verifyRules = useNetSplitStore((state) => state.verifyRules);
   const isVerifyingRules = useNetSplitStore((state) => state.isVerifyingRules);
+  const isEngineEnabled = useNetSplitStore((state) => state.isEngineEnabled);
+  const toggleMasterEngine = useNetSplitStore((state) => state.toggleMasterEngine);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -43,29 +45,52 @@ export const OverviewScreen: React.FC = () => {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Top Banner / Routing Status */}
-      <View style={[styles.heroCard, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
+      <View
+        style={[
+          styles.heroCard,
+          {
+            backgroundColor: theme.surfaceCard,
+            borderColor: isEngineEnabled ? theme.border : (themeMode === 'dark' ? '#475569' : '#cbd5e1'),
+          },
+        ]}
+      >
         <View style={styles.heroLeft}>
-          <ShieldIcon size={28} color={theme.accent} />
+          <ShieldIcon size={28} color={isEngineEnabled ? theme.accent : theme.textTertiary} />
           <View style={{ marginLeft: 14 }}>
             <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>
-              Windows Filtering Platform Engine
+              {isEngineEnabled
+                ? 'Windows Filtering Platform Engine Active'
+                : 'NetSplit Routing Engine Paused'}
             </Text>
             <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
-              Per-Application socket redirection active with verified interface binding (IP_UNICAST_IF)
+              {isEngineEnabled
+                ? 'Per-Application socket redirection active with verified interface binding (IP_UNICAST_IF)'
+                : 'Master switch is OFF. All routing rules are bypassed and network traffic flows through standard Windows defaults.'}
             </Text>
           </View>
         </View>
 
         <View style={styles.heroRight}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: theme.accent }]}
-            onPress={() => verifyRules()}
-            disabled={isVerifyingRules}
-          >
-            <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
-              {isVerifyingRules ? 'Verifying...' : 'Verify System Rules'}
-            </Text>
-          </TouchableOpacity>
+          {isEngineEnabled ? (
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: theme.accent }]}
+              onPress={() => verifyRules()}
+              disabled={isVerifyingRules}
+            >
+              <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
+                {isVerifyingRules ? 'Verifying...' : 'Verify System Rules'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: theme.accent }]}
+              onPress={() => toggleMasterEngine(true)}
+            >
+              <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
+                ⚡ Resume Engine
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

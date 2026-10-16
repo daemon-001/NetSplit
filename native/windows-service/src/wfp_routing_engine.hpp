@@ -32,6 +32,11 @@ public:
     bool RemoveRule(const std::string& ruleId, std::string& outError);
     bool VerifyRule(const std::string& ruleId, std::string& outStatusDetails);
 
+    // Master Engine Switch: Suspend/Resume routing enforcement
+    bool SuspendEngine(std::string& outError);
+    bool ResumeEngine(const std::vector<AssignmentRule>& rules, std::string& outError);
+    bool IsEngineSuspended() const { return m_engineSuspended; }
+
     bool IsRunning() const { return m_running; }
     size_t GetActiveFilterCount();
 
@@ -42,6 +47,7 @@ private:
     AdapterManager* m_pAdapterMgr;
     HANDLE m_engineHandle = NULL;
     std::atomic<bool> m_running{false};
+    std::atomic<bool> m_engineSuspended{false};
     std::recursive_mutex m_mutex;
 
     // Track applied filters: ruleId -> ActiveWfpRule

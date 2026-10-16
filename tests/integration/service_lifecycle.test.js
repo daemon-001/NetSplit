@@ -219,6 +219,76 @@ describe('Service Daemon & Live IPC Integration Tests', () => {
     assert.strictEqual(resetData.result.defaultRoutingPolicy, 'WINDOWS_DEFAULT');
   });
 
+  test('Master switch engine.toggle suspends and resumes routing engine', async () => {
+    // 1. Toggle engine OFF
+    const offRes = await fetch('http://127.0.0.1:48192', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'eng-1',
+        method: 'engine.toggle',
+        enabled: false,
+      }),
+    });
+    const offData = await offRes.json();
+    assert.strictEqual(offData.result.success, true);
+    assert.strictEqual(offData.result.engineEnabled, false);
+
+    // 2. Verify status reports suspended engine
+    const statusRes = await fetch('http://127.0.0.1:48192', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'eng-2',
+        method: 'system.getStatus',
+      }),
+    });
+    const statusData = await statusRes.json();
+    assert.strictEqual(statusData.result.routingEngineEnabled, false);
+
+    // 3. Toggle engine back ON
+    const onRes = await fetch('http://127.0.0.1:48192', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'eng-3',
+        method: 'engine.toggle',
+        enabled: true,
+      }),
+    });
+    const onData = await onRes.json();
+    assert.strictEqual(onData.result.success, true);
+    assert.strictEqual(onData.result.engineEnabled, true);
+
+    // 4. Verify status reports active engine
+    const statusRes2 = await fetch('http://127.0.0.1:48192', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'eng-4',
+        method: 'system.getStatus',
+      }),
+    });
+    const statusData2 = await statusRes2.json();
+    assert.strictEqual(statusData2.result.routingEngineEnabled, true);
+  });
+
   test('Service stops cleanly on termination signal', async () => {
     if (serviceProc && !serviceProc.killed) {
       try {
