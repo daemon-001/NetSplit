@@ -232,7 +232,7 @@ bool AssignmentManager::Load() {
         rule.adapterName = StringToWString(ExtractJsonStr(obj, "adapterName"));
         rule.enabled = ExtractJsonBoolVal(obj, "enabled", true);
         rule.fallbackMode = ExtractJsonStr(obj, "fallbackMode");
-        if (rule.fallbackMode.empty()) rule.fallbackMode = "BLOCK";
+        if (rule.fallbackMode.empty()) rule.fallbackMode = "WINDOWS_DEFAULT";
         rule.status = "UNVERIFIED";
         rule.createdAt = ExtractJsonStr(obj, "createdAt");
         rule.updatedAt = ExtractJsonStr(obj, "updatedAt");
@@ -340,7 +340,7 @@ bool AssignmentManager::SetAssignment(const std::string& applicationId,
         // Atomic replacement of existing rule for this application
         it->second.adapterId = adapterId;
         it->second.adapterName = adapterName;
-        it->second.fallbackMode = fallbackMode.empty() ? "BLOCK" : fallbackMode;
+        it->second.fallbackMode = fallbackMode.empty() ? "WINDOWS_DEFAULT" : fallbackMode;
         it->second.updatedAt = timestamp;
         it->second.status = "UNVERIFIED";
         outRule = it->second;
@@ -353,7 +353,7 @@ bool AssignmentManager::SetAssignment(const std::string& applicationId,
         newRule.executablePath = executablePath;
         newRule.adapterId = adapterId;
         newRule.adapterName = adapterName;
-        newRule.fallbackMode = fallbackMode.empty() ? "BLOCK" : fallbackMode;
+        newRule.fallbackMode = fallbackMode.empty() ? "WINDOWS_DEFAULT" : fallbackMode;
         newRule.enabled = true;
         newRule.status = "UNVERIFIED";
         newRule.createdAt = timestamp;

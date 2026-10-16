@@ -590,6 +590,7 @@ std::string IpcServer::HandleListApp(const std::string& reqId) {
         if (pRule) {
             ss << "\"assignedAdapterId\":\"" << JsonEscape(pRule->adapterId) << "\",";
             ss << "\"assignedAdapterName\":\"" << JsonEscape(WStringToString(pRule->adapterName)) << "\",";
+            ss << "\"fallbackMode\":\"" << JsonEscape(pRule->fallbackMode) << "\",";
             ss << "\"ruleStatus\":\"" << JsonEscape(pRule->status) << "\"";
         } else {
             ss << "\"ruleStatus\":\"NONE\"";

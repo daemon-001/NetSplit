@@ -62,6 +62,8 @@ export interface ApplicationInfo {
   assignedAdapterName?: string;
   isOppositeDefault?: boolean;
   isFollowDefault?: boolean;
+  isMerged?: boolean;
+  fallbackMode?: FallbackPolicy;
   ruleStatus: RuleEnforcementStatus;
   lastError?: string;
 }
@@ -77,6 +79,7 @@ export interface RoutingRule {
   adapterName: string;
   isOppositeDefault?: boolean;
   isFollowDefault?: boolean;
+  isMerged?: boolean;
   enabled: boolean;
   fallbackMode: FallbackPolicy;
   status: RuleEnforcementStatus;

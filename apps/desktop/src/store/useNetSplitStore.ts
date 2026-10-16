@@ -82,8 +82,33 @@ export const getOppositeAdapter = (
   const hardwareAdapters = adapters.filter(
     (a) => a.type === 'WIFI' || a.type === 'ETHERNET' || a.type === 'CELLULAR'
   );
-  if (hardwareAdapters.length < 2) return undefined;
+  if (hardwareAdapters.length === 0) return undefined;
 
+  const effectiveDefaultId =
+    defaultAdapterId ||
+    adapters.find((a) => a.isDefaultRoute)?.id ||
+    hardwareAdapters[0]?.id;
+
+  // 1. Primary choice: distinct hardware adapter that is currently UP
+  const upOpposite = hardwareAdapters.find(
+    (a) => a.id !== effectiveDefaultId && a.status === 'UP'
+  );
+  if (upOpposite) return upOpposite;
+
+  // 2. If the distinct opposite adapter is disconnected/DOWN, merge to the available active UP adapter!
+  const availableUp = hardwareAdapters.find((a) => a.status === 'UP');
+  if (availableUp) return availableUp;
+
+  return hardwareAdapters.find((a) => a.id !== effectiveDefaultId);
+};
+
+export const isOppositeAdapterMerged = (
+  adapters: NetworkAdapter[],
+  defaultAdapterId?: string
+): boolean => {
+  const hardwareAdapters = adapters.filter(
+    (a) => a.type === 'WIFI' || a.type === 'ETHERNET' || a.type === 'CELLULAR'
+  );
   const effectiveDefaultId =
     defaultAdapterId ||
     adapters.find((a) => a.isDefaultRoute)?.id ||
@@ -92,9 +117,7 @@ export const getOppositeAdapter = (
   const upOpposite = hardwareAdapters.find(
     (a) => a.id !== effectiveDefaultId && a.status === 'UP'
   );
-  if (upOpposite) return upOpposite;
-
-  return hardwareAdapters.find((a) => a.id !== effectiveDefaultId);
+  return !upOpposite && hardwareAdapters.some((a) => a.status === 'UP');
 };
 
 interface NetSplitState {
@@ -140,6 +163,8 @@ interface NetSplitState {
   removeAssignment: (appId: string) => Promise<void>;
   toggleRule: (ruleId: string, enabled: boolean) => Promise<void>;
   bulkToggleRules: (appIds: string[], enabled: boolean) => Promise<void>;
+  toggleRuleMerge: (ruleId: string, mergeEnabled: boolean) => Promise<void>;
+  bulkToggleRuleMerge: (appIds: string[], mergeEnabled: boolean) => Promise<void>;
   verifyRules: () => Promise<void>;
   syncOppositeDefaultRules: (overrideDefaultAdapterId?: string) => Promise<void>;
   syncFollowDefaultRules: (overrideDefaultAdapterId?: string) => Promise<void>;
@@ -252,31 +277,46 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       ]);
 
       // Derive rules from apps that have assigned adapters
+      // Derive rules from apps that have assigned adapters
       const oppositeIds = get().oppositeDefaultAppIds;
       const followDefaultIds = get().followDefaultAppIds;
+      const effectiveDefaultId =
+        cfg?.defaultAdapterId ||
+        get().settings.defaultAdapterId ||
+        adapters.find((a) => a.isDefaultRoute)?.id;
+      const isOppMerged = isOppositeAdapterMerged(adapters, effectiveDefaultId);
+
       const appsWithDynamic = apps.map((a) => ({
         ...a,
         isOppositeDefault: oppositeIds.includes(a.id),
         isFollowDefault: followDefaultIds.includes(a.id),
+        isMerged: oppositeIds.includes(a.id) ? isOppMerged : false,
       }));
 
+      const existingRules = get().rules;
       const rules: RoutingRule[] = appsWithDynamic
         .filter((a) => a.assignedAdapterId && a.assignedAdapterId.length > 0)
-        .map((a) => ({
-          id: `rule-${a.id}`,
-          applicationId: a.id,
-          applicationName: a.name,
-          executablePath: a.executablePath,
-          adapterId: a.assignedAdapterId!,
-          adapterName: a.assignedAdapterName || 'Adapter',
-          isOppositeDefault: a.isOppositeDefault,
-          isFollowDefault: a.isFollowDefault,
-          enabled: a.ruleStatus !== 'INACTIVE',
-          fallbackMode: 'BLOCK',
-          status: a.ruleStatus || 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }));
+        .map((a) => {
+          const existingRule = existingRules.find((r) => r.applicationId === a.id);
+          const fallbackMode: FallbackPolicy =
+            (a as any).fallbackMode || existingRule?.fallbackMode || 'WINDOWS_DEFAULT';
+          return {
+            id: `rule-${a.id}`,
+            applicationId: a.id,
+            applicationName: a.name,
+            executablePath: a.executablePath,
+            adapterId: a.assignedAdapterId!,
+            adapterName: a.assignedAdapterName || 'Adapter',
+            isOppositeDefault: a.isOppositeDefault,
+            isFollowDefault: a.isFollowDefault,
+            isMerged: a.isMerged,
+            enabled: a.ruleStatus !== 'INACTIVE',
+            fallbackMode,
+            status: a.ruleStatus || 'ACTIVE',
+            createdAt: existingRule?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+        });
 
       set((state) => ({
         serviceConnected: status !== null,
@@ -291,11 +331,6 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
 
       // Check if any opposite-default or follow-default app is out of sync
       if (adapters.length > 0) {
-        const effectiveDefaultId =
-          cfg?.defaultAdapterId ||
-          get().settings.defaultAdapterId ||
-          adapters.find((a) => a.isDefaultRoute)?.id;
-
         if (followDefaultIds.length > 0) {
           const targetDefault = getDefaultAdapter(adapters, effectiveDefaultId);
           if (targetDefault) {
@@ -311,14 +346,14 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
           }
         }
 
-        if (oppositeIds.length > 0 && adapters.length >= 2) {
+        if (oppositeIds.length > 0) {
           const targetOpposite = getOppositeAdapter(adapters, effectiveDefaultId);
           if (targetOpposite) {
             const needsSync = appsWithDynamic.some(
               (a) =>
                 oppositeIds.includes(a.id) &&
                 a.assignedAdapterId &&
-                a.assignedAdapterId !== targetOpposite.id
+                (a.assignedAdapterId !== targetOpposite.id || a.isMerged !== isOppMerged)
             );
             if (needsSync) {
               get().syncOppositeDefaultRules(effectiveDefaultId).catch(() => {});
@@ -332,7 +367,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     }
   },
 
-  assignApp: async (appId: string, adapterId: string, fallbackMode: FallbackPolicy = 'BLOCK') => {
+  assignApp: async (appId: string, adapterId: string, fallbackMode: FallbackPolicy = 'WINDOWS_DEFAULT') => {
     const { apps, adapters, rules, settings, oppositeDefaultAppIds, followDefaultAppIds } = get();
     const app = apps.find((a) => a.id === appId);
     if (!app) return;
@@ -368,6 +403,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       : followDefaultAppIds.filter((id) => id !== appId);
     saveFollowDefaultApps(nextFollowIds);
 
+    const isMerged = isOpposite ? isOppositeAdapterMerged(adapters, effectiveDefaultId) : false;
+
     // 1. Optimistic update immediately for instant UI feedback
     const prevApps = apps;
     const prevRules = rules;
@@ -380,6 +417,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             assignedAdapterName: adapter.friendlyName,
             isOppositeDefault: isOpposite,
             isFollowDefault: isFollow,
+            isMerged,
+            fallbackMode,
             ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
           }
         : a
@@ -395,6 +434,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       adapterName: adapter.friendlyName,
       isOppositeDefault: isOpposite,
       isFollowDefault: isFollow,
+      isMerged,
       enabled: true,
       fallbackMode,
       status: 'ACTIVE',
@@ -462,6 +502,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       : followDefaultAppIds.filter((id) => !selectedAppIds.includes(id));
     saveFollowDefaultApps(nextFollowIds);
 
+    const isMerged = isOpposite ? isOppositeAdapterMerged(adapters, effectiveDefaultId) : false;
+
     const prevApps = apps;
     const prevRules = rules;
 
@@ -474,6 +516,8 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             assignedAdapterName: adapter.friendlyName,
             isOppositeDefault: isOpposite,
             isFollowDefault: isFollow,
+            isMerged,
+            fallbackMode: 'WINDOWS_DEFAULT' as FallbackPolicy,
             ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
           }
         : a
@@ -494,8 +538,9 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
           adapterName: adapter.friendlyName,
           isOppositeDefault: isOpposite,
           isFollowDefault: isFollow,
+          isMerged,
           enabled: true,
-          fallbackMode: 'BLOCK',
+          fallbackMode: 'WINDOWS_DEFAULT',
           status: 'ACTIVE',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -520,7 +565,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
         executablePath: app.executablePath,
         applicationName: app.name,
         adapterId: adapter.id,
-        fallbackMode: 'BLOCK' as FallbackPolicy,
+        fallbackMode: 'WINDOWS_DEFAULT' as FallbackPolicy,
       }));
 
     try {
@@ -719,6 +764,104 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     }
   },
 
+  toggleRuleMerge: async (ruleId: string, mergeEnabled: boolean) => {
+    const { rules, apps, adapters, settings } = get();
+    const fallbackMode: FallbackPolicy = mergeEnabled ? 'WINDOWS_DEFAULT' : 'BLOCK';
+    const prevRules = rules;
+    const prevApps = apps;
+
+    const targetRule = rules.find((r) => r.id === ruleId);
+    if (!targetRule) return;
+
+    // 1. Optimistic toggle
+    const updatedRules = rules.map((r) =>
+      r.id === ruleId
+        ? {
+            ...r,
+            fallbackMode,
+          }
+        : r
+    );
+
+    const updatedApps = apps.map((a) =>
+      a.id === targetRule.applicationId
+        ? {
+            ...a,
+            fallbackMode,
+          }
+        : a
+    );
+
+    set({ rules: updatedRules, apps: updatedApps, lastError: null });
+
+    const effectiveDefaultId =
+      settings.defaultAdapterId || adapters.find((a) => a.isDefaultRoute)?.id;
+
+    let targetAdapterId = targetRule.adapterId;
+    if (targetRule.isOppositeDefault) {
+      const opp = getOppositeAdapter(adapters, effectiveDefaultId);
+      if (opp) targetAdapterId = opp.id;
+    }
+
+    try {
+      await defaultIpcClient.assignRule({
+        applicationId: targetRule.applicationId,
+        executablePath: targetRule.executablePath,
+        applicationName: targetRule.applicationName,
+        adapterId: targetAdapterId,
+        fallbackMode,
+      });
+      get().refreshAll(false).catch(() => {});
+    } catch (err: unknown) {
+      set({ rules: prevRules, apps: prevApps, lastError: String(err) });
+    }
+  },
+
+  bulkToggleRuleMerge: async (appIds: string[], mergeEnabled: boolean) => {
+    const { rules, apps } = get();
+    const fallbackMode: FallbackPolicy = mergeEnabled ? 'WINDOWS_DEFAULT' : 'BLOCK';
+    const prevRules = rules;
+    const prevApps = apps;
+
+    const updatedRules = rules.map((r) =>
+      appIds.includes(r.applicationId)
+        ? {
+            ...r,
+            fallbackMode,
+          }
+        : r
+    );
+
+    const updatedApps = apps.map((a) =>
+      appIds.includes(a.id)
+        ? {
+            ...a,
+            fallbackMode,
+          }
+        : a
+    );
+
+    set({ rules: updatedRules, apps: updatedApps, lastError: null });
+
+    try {
+      for (const appId of appIds) {
+        const r = rules.find((item) => item.applicationId === appId);
+        if (r) {
+          await defaultIpcClient.assignRule({
+            applicationId: r.applicationId,
+            executablePath: r.executablePath,
+            applicationName: r.applicationName,
+            adapterId: r.adapterId,
+            fallbackMode,
+          }).catch(() => {});
+        }
+      }
+      get().refreshAll(false).catch(() => {});
+    } catch (err: unknown) {
+      set({ rules: prevRules, apps: prevApps, lastError: String(err) });
+    }
+  },
+
   verifyRules: async () => {
     set({ isVerifyingRules: true });
     try {
@@ -746,7 +889,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
 
   syncOppositeDefaultRules: async (overrideDefaultAdapterId?: string) => {
     const { oppositeDefaultAppIds, apps, adapters, rules, settings } = get();
-    if (oppositeDefaultAppIds.length === 0 || adapters.length < 2) return;
+    if (oppositeDefaultAppIds.length === 0 || adapters.length === 0) return;
 
     const defaultId =
       overrideDefaultAdapterId ||
@@ -755,9 +898,13 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     const newOpposite = getOppositeAdapter(adapters, defaultId);
     if (!newOpposite) return;
 
+    const isMerged = isOppositeAdapterMerged(adapters, defaultId);
+
     // Filter apps that need updating
     const appsToUpdate = apps.filter(
-      (a) => oppositeDefaultAppIds.includes(a.id) && a.assignedAdapterId !== newOpposite.id
+      (a) =>
+        oppositeDefaultAppIds.includes(a.id) &&
+        (a.assignedAdapterId !== newOpposite.id || a.isMerged !== isMerged)
     );
 
     if (appsToUpdate.length === 0) return;
@@ -770,6 +917,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             assignedAdapterId: newOpposite.id,
             assignedAdapterName: newOpposite.friendlyName,
             isOppositeDefault: true,
+            isMerged,
             ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
           }
         : a
@@ -782,6 +930,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             adapterId: newOpposite.id,
             adapterName: newOpposite.friendlyName,
             isOppositeDefault: true,
+            isMerged,
           }
         : r
     );
@@ -791,12 +940,14 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     // Send RPC assignments for each app
     for (const app of appsToUpdate) {
       try {
+        const rule = rules.find((r) => r.applicationId === app.id);
+        const fallbackMode = rule?.fallbackMode || 'WINDOWS_DEFAULT';
         await defaultIpcClient.assignRule({
           applicationId: app.id,
           executablePath: app.executablePath,
           applicationName: app.name,
           adapterId: newOpposite.id,
-          fallbackMode: 'BLOCK',
+          fallbackMode,
         });
       } catch (e) {
         console.warn(`Failed to reassign opposite app ${app.name}:`, e);

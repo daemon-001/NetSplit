@@ -7,13 +7,13 @@ import { ShieldIcon, RefreshIcon } from '../components/Icons';
 import { QuickAdapterSelector } from '../components/QuickAdapterSelector';
 import { BulkActionBar } from '../components/BulkActionBar';
 
-type RuleSortColumn = 'app' | 'adapter' | 'enabled' | 'status';
+type RuleSortColumn = 'app' | 'adapter' | 'merge' | 'status';
 type SortOrder = 'asc' | 'desc';
 
 export const RoutingRulesScreen: React.FC = () => {
   const themeMode = useNetSplitStore((state) => state.themeMode);
   const rules = useNetSplitStore((state) => state.rules);
-  const toggleRule = useNetSplitStore((state) => state.toggleRule);
+  const toggleRuleMerge = useNetSplitStore((state) => state.toggleRuleMerge);
   const removeAssignment = useNetSplitStore((state) => state.removeAssignment);
   const verifyRules = useNetSplitStore((state) => state.verifyRules);
   const isVerifyingRules = useNetSplitStore((state) => state.isVerifyingRules);
@@ -33,8 +33,8 @@ export const RoutingRulesScreen: React.FC = () => {
 
   // Compute counts for top filter tabs
   const totalCount = rules.length;
-  const enabledCount = rules.filter((r) => r.enabled).length;
-  const disabledCount = rules.filter((r) => !r.enabled).length;
+  const mergedCount = rules.filter((r) => r.fallbackMode !== 'BLOCK').length;
+  const isolatedCount = rules.filter((r) => r.fallbackMode === 'BLOCK').length;
   const errorCount = rules.filter((r) => r.status === 'ERROR').length;
   const followDefaultCount = rules.filter((r) => r.isFollowDefault).length;
   const oppositeCount = rules.filter((r) => r.isOppositeDefault).length;
@@ -52,8 +52,8 @@ export const RoutingRulesScreen: React.FC = () => {
 
   const filterTabs = [
     { key: 'all', label: `All (${totalCount})` },
-    { key: 'enabled', label: `Enabled (${enabledCount})` },
-    { key: 'disabled', label: `Disabled (${disabledCount})` },
+    { key: 'merged', label: `Merged (${mergedCount})` },
+    { key: 'isolated', label: `Isolated (${isolatedCount})` },
     ...(followDefaultCount > 0 ? [{ key: 'follow_default', label: `★ Default (${followDefaultCount})` }] : []),
     ...(oppositeCount > 0 ? [{ key: 'opposite', label: `⇄ Opposite (${oppositeCount})` }] : []),
     ...(errorCount > 0 ? [{ key: 'error', label: `Errors (${errorCount})` }] : []),
@@ -66,8 +66,8 @@ export const RoutingRulesScreen: React.FC = () => {
   // 1. Filter rules by tab
   let filteredRules = rules.filter((r) => {
     if (ruleFilter === 'all') return true;
-    if (ruleFilter === 'enabled') return r.enabled;
-    if (ruleFilter === 'disabled') return !r.enabled;
+    if (ruleFilter === 'merged') return r.fallbackMode !== 'BLOCK';
+    if (ruleFilter === 'isolated') return r.fallbackMode === 'BLOCK';
     if (ruleFilter === 'follow_default') return !!r.isFollowDefault;
     if (ruleFilter === 'opposite') return !!r.isOppositeDefault;
     if (ruleFilter === 'error') return r.status === 'ERROR';
@@ -110,8 +110,10 @@ export const RoutingRulesScreen: React.FC = () => {
       if (comparison === 0) {
         comparison = a.applicationName.localeCompare(b.applicationName);
       }
-    } else if (sortColumn === 'enabled') {
-      comparison = (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0);
+    } else if (sortColumn === 'merge') {
+      const aMerged = a.fallbackMode !== 'BLOCK' ? 1 : 0;
+      const bMerged = b.fallbackMode !== 'BLOCK' ? 1 : 0;
+      comparison = bMerged - aMerged;
       if (comparison === 0) {
         comparison = a.applicationName.localeCompare(b.applicationName);
       }
@@ -283,30 +285,30 @@ export const RoutingRulesScreen: React.FC = () => {
           </Text>
         </TouchableOpacity>
 
-        {/* ENABLED Column Header */}
+        {/* MERGE Column Header */}
         <TouchableOpacity
           style={[styles.colEnabled, styles.headerSortBtn]}
-          onPress={() => handleSort('enabled')}
+          onPress={() => handleSort('merge')}
           activeOpacity={0.7}
         >
           <Text
             style={[
               styles.colHeaderText,
-              { color: sortColumn === 'enabled' ? theme.accent : theme.textTertiary },
+              { color: sortColumn === 'merge' ? theme.accent : theme.textTertiary },
             ]}
           >
-            ENABLED
+            MERGE
           </Text>
           <Text
             style={[
               styles.sortArrow,
               {
-                color: sortColumn === 'enabled' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'enabled' ? 1 : 0.4,
+                color: sortColumn === 'merge' ? theme.accent : theme.textTertiary,
+                opacity: sortColumn === 'merge' ? 1 : 0.4,
               },
             ]}
           >
-            {sortColumn === 'enabled' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
+            {sortColumn === 'merge' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
           </Text>
         </TouchableOpacity>
 
@@ -399,17 +401,36 @@ export const RoutingRulesScreen: React.FC = () => {
                   isFollowDefault={item.isFollowDefault}
                 />
                 <Text style={[styles.fallbackText, { color: theme.textTertiary }]} numberOfLines={1}>
-                  Fallback: {item.fallbackMode === 'BLOCK' ? 'Drop / Kill-Switch' : 'Windows Default'}
+                  Target: {item.adapterName}
                 </Text>
               </View>
 
-              {/* Toggle Enable/Disable */}
+              {/* Toggle Merge Switch */}
               <View style={styles.colEnabled}>
-                <Switch
-                  value={item.enabled}
-                  onValueChange={(val) => toggleRule(item.id, val)}
-                  trackColor={{ false: theme.surfaceHover, true: theme.accent }}
-                />
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Switch
+                    value={item.fallbackMode !== 'BLOCK'}
+                    onValueChange={(val) => toggleRuleMerge(item.id, val)}
+                    trackColor={{
+                      false: theme.surfaceHover,
+                      true: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.4)' : '#6ee7b7',
+                    }}
+                    thumbColor={item.fallbackMode !== 'BLOCK' ? theme.success : (themeMode === 'dark' ? '#94a3b8' : '#cbd5e1')}
+                  />
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: '700',
+                      marginLeft: 6,
+                      color: item.fallbackMode !== 'BLOCK' ? theme.success : theme.textTertiary,
+                    }}
+                  >
+                    {item.fallbackMode !== 'BLOCK' ? 'MERGE ON' : 'OFF'}
+                  </Text>
+                </View>
+                <Text style={[styles.fallbackText, { color: theme.textTertiary, marginTop: 2 }]} numberOfLines={1}>
+                  {item.fallbackMode !== 'BLOCK' ? 'Auto-failover enabled' : 'Kill-switch (isolated)'}
+                </Text>
               </View>
 
               {/* Status */}
@@ -604,7 +625,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   colEnabled: {
-    width: 80,
+    width: 150,
     alignItems: 'flex-start',
   },
   colStatus: {

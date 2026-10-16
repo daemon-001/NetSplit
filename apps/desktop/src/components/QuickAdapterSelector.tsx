@@ -50,7 +50,7 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
     if (adapterId === 'UNASSIGN') {
       await removeAssignment(applicationId);
     } else {
-      await assignApp(applicationId, adapterId, 'BLOCK');
+      await assignApp(applicationId, adapterId, 'WINDOWS_DEFAULT');
     }
   };
 
@@ -205,10 +205,8 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
                   backgroundColor: isOpposite
                     ? (themeMode === 'dark' ? 'rgba(139, 92, 246, 0.18)' : '#f3e8ff')
                     : 'transparent',
-                  opacity: hardwareAdapters.length < 2 ? 0.5 : 1,
                 },
               ]}
-              disabled={hardwareAdapters.length < 2}
               onPress={() => handleSelectAdapter('OPPOSITE_DEFAULT')}
             >
               <View style={styles.adapterIconBox}>
@@ -244,9 +242,7 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
                 </View>
 
                 <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
-                  {hardwareAdapters.length >= 2
-                    ? `Always routes via non-default link (currently: ${oppositeAdapter?.friendlyName || 'Secondary'})`
-                    : 'Requires 2 or more active network adapters'}
+                  Always routes via non-default link (currently: {oppositeAdapter?.friendlyName || 'Auto'})
                 </Text>
               </View>
 

@@ -23,7 +23,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
   const settings = useNetSplitStore((state) => state.settings);
   const bulkAssign = useNetSplitStore((state) => state.bulkAssign);
   const bulkUnassign = useNetSplitStore((state) => state.bulkUnassign);
-  const bulkToggleRules = useNetSplitStore((state) => state.bulkToggleRules);
+  const bulkToggleRuleMerge = useNetSplitStore((state) => state.bulkToggleRuleMerge);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -69,16 +69,16 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
           <>
             <TouchableOpacity
               style={[styles.btnSecondary, { borderColor: theme.border, backgroundColor: theme.surfaceHover }]}
-              onPress={() => bulkToggleRules(selectedAppIds, true)}
+              onPress={() => bulkToggleRuleMerge(selectedAppIds, true)}
             >
-              <Text style={[styles.btnSecondaryText, { color: theme.success, fontWeight: '600' }]}>Enable All</Text>
+              <Text style={[styles.btnSecondaryText, { color: theme.success, fontWeight: '600' }]}>Enable Merge (All)</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.btnSecondary, { borderColor: theme.border, backgroundColor: theme.surfaceHover }]}
-              onPress={() => bulkToggleRules(selectedAppIds, false)}
+              onPress={() => bulkToggleRuleMerge(selectedAppIds, false)}
             >
-              <Text style={[styles.btnSecondaryText, { color: theme.warning, fontWeight: '600' }]}>Disable All</Text>
+              <Text style={[styles.btnSecondaryText, { color: theme.warning, fontWeight: '600' }]}>Isolate (Kill-Switch)</Text>
             </TouchableOpacity>
           </>
         )}
