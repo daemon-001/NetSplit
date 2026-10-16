@@ -24,24 +24,22 @@ export const OverviewScreen: React.FC = () => {
   const [isInstalling, setIsInstalling] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [installSuccess, setInstallSuccess] = useState<string | null>(null);
-  const [isServiceInstalled, setIsServiceInstalled] = useState<boolean | null>(null);
+  const isStoreServiceInstalled = useNetSplitStore((state) => state.isServiceInstalled);
+  const [localIsServiceInstalled, setLocalIsServiceInstalled] = useState<boolean | null>(null);
+
+  const isServiceInstalled = localIsServiceInstalled ?? isStoreServiceInstalled ?? serviceConnected;
 
   React.useEffect(() => {
     const checkInstalled = async () => {
       if (typeof window !== 'undefined' && (window as any).netSplitHost?.isServiceInstalled) {
         try {
           const installed = await (window as any).netSplitHost.isServiceInstalled();
-          setIsServiceInstalled(installed);
+          setLocalIsServiceInstalled(installed);
+          useNetSplitStore.setState({ isServiceInstalled: installed });
         } catch {}
       }
     };
     checkInstalled();
-
-    if (typeof window !== 'undefined' && (window as any).netSplitHost?.onServiceUninstalled) {
-      (window as any).netSplitHost.onServiceUninstalled(() => {
-        setIsServiceInstalled(false);
-      });
-    }
   }, [serviceConnected]);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
@@ -81,8 +79,9 @@ export const OverviewScreen: React.FC = () => {
       }
       if (res?.token) {
         defaultIpcClient.setToken(res.token);
-        setIsServiceInstalled(true);
       }
+      setLocalIsServiceInstalled(true);
+      useNetSplitStore.setState({ isServiceInstalled: true, serviceConnected: true });
       await refreshAll();
       setInstallSuccess('NetSplit Windows Service is active.');
     } catch (e: any) {

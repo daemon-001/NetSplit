@@ -154,19 +154,13 @@ static std::vector<std::string> ExtractObjectsFromArray(const std::string& json,
     return results;
 }
 
-static void UpdateWindowsStartupRegistry(bool enable) {
+static void UpdateWindowsStartupRegistry(bool /*enable*/) {
     HKEY hKey;
     if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_SET_VALUE, &hKey) == ERROR_SUCCESS) {
-        if (enable) {
-            wchar_t exePath[MAX_PATH];
-            GetModuleFileNameW(NULL, exePath, MAX_PATH);
-            std::wstring cmd = L"\"";
-            cmd += exePath;
-            cmd += L"\" --background";
-            RegSetValueExW(hKey, L"NetSplitService", 0, REG_SZ, (const BYTE*)cmd.c_str(), (DWORD)((cmd.size() + 1) * sizeof(wchar_t)));
-        } else {
-            RegDeleteValueW(hKey, L"NetSplitService");
-        }
+        // NetSplitService is a background system service managed exclusively by Windows SCM (Session 0).
+        // It must never be added to HKCU Run, which causes an unwanted visible command prompt window
+        // on logon and collides on port 48192 (Error 10048 WSAEADDRINUSE).
+        RegDeleteValueW(hKey, L"NetSplitService");
         RegCloseKey(hKey);
     }
 }

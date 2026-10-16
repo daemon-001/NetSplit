@@ -372,6 +372,20 @@ ipcMain.handle('is-service-installed', async () => {
   });
 });
 
+ipcMain.handle('set-start-with-windows', async (_event, enabled) => {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: !!enabled,
+      path: process.execPath,
+      args: ['--minimized'],
+    });
+    return true;
+  } catch (err) {
+    console.warn('[Electron] Failed to update login item settings:', err);
+    return false;
+  }
+});
+
 function getWindowHelperPath() {
   const candidates = [
     path.resolve(__dirname, '../../../native/window_helper.exe'),
@@ -422,6 +436,9 @@ ipcMain.handle('get-visible-windows', async () => {
 
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.netsplit.app');
+  // Clean up any legacy registry run entry for the background console daemon
+  const { exec } = require('child_process');
+  exec('reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" /v NetSplitService /f', () => {});
 }
 app.setName('NetSplit');
 

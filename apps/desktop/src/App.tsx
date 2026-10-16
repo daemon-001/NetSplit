@@ -33,6 +33,7 @@ export const App: React.FC = () => {
         if (data?.token) {
           defaultIpcClient.setToken(data.token);
         }
+        useNetSplitStore.setState({ isServiceInstalled: true, serviceConnected: true });
         refreshAll();
       });
     }
@@ -42,6 +43,7 @@ export const App: React.FC = () => {
       (window as unknown as { netSplitHost: { onServiceUninstalled: (cb: () => void) => void } }).netSplitHost.onServiceUninstalled(() => {
         defaultIpcClient.setToken('');
         useNetSplitStore.setState({
+          isServiceInstalled: false,
           serviceConnected: false,
           isEngineEnabled: false,
           systemStatus: null,

@@ -148,6 +148,7 @@ interface NetSplitState {
   currentScreen: ScreenType;
   themeMode: 'dark' | 'light';
   serviceConnected: boolean;
+  isServiceInstalled: boolean | null;
   isLoading: boolean;
   isVerifyingRules: boolean;
   lastError: string | null;
@@ -172,6 +173,7 @@ interface NetSplitState {
 
   // Actions
   fetchVisibleWindows: () => Promise<void>;
+  checkServiceInstalled: () => Promise<boolean>;
   setCurrentScreen: (screen: ScreenType) => void;
   setThemeMode: (mode: 'dark' | 'light') => void;
   toggleTheme: () => void;
@@ -205,6 +207,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   currentScreen: 'overview',
   themeMode: 'dark',
   serviceConnected: false,
+  isServiceInstalled: null,
   isLoading: false,
   isVerifyingRules: false,
   lastError: null,
@@ -277,7 +280,22 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   selectAllApps: (appIds) => set({ selectedAppIds: appIds }),
   clearSelection: () => set({ selectedAppIds: [] }),
 
+  checkServiceInstalled: async () => {
+    if (typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { isServiceInstalled?: () => Promise<boolean> } }).netSplitHost?.isServiceInstalled) {
+      try {
+        const installed = await (window as unknown as { netSplitHost: { isServiceInstalled: () => Promise<boolean> } }).netSplitHost.isServiceInstalled();
+        set({ isServiceInstalled: !!installed });
+        return !!installed;
+      } catch {
+        set({ isServiceInstalled: false });
+        return false;
+      }
+    }
+    return false;
+  },
+
   init: async () => {
+    get().checkServiceInstalled().catch(() => {});
     try {
       if (typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { getToken: () => Promise<string | null> } }).netSplitHost?.getToken) {
         const token = await (window as unknown as { netSplitHost: { getToken: () => Promise<string | null> } }).netSplitHost.getToken();
@@ -363,6 +381,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
 
       set((state) => ({
         serviceConnected: status !== null,
+        isServiceInstalled: status !== null ? true : state.isServiceInstalled,
         systemStatus: status,
         isEngineEnabled:
           status?.routingEngineEnabled !== undefined
