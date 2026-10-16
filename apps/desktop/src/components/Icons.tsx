@@ -123,13 +123,20 @@ export const SwapIcon: React.FC<IconProps> = ({ size = 14, color = '#ffffff' }) 
   </View>
 );
 
-export const StarIcon: React.FC<IconProps> = ({ size = 14, color = '#ffffff', style }) => (
-  <View style={[styles.center, { width: size, height: size }, style]}>
-    <View style={{ width: size * 0.75, height: size * 0.75, borderRadius: 2, borderWidth: 1.5, borderColor: color, transform: [{ rotate: '45deg' }], alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: color }} />
+export const StarIcon: React.FC<IconProps> = ({ size = 14, color = '#ffffff', style }) => {
+  const arm = Math.max(1.5, size * 0.18);
+  const len = size * 0.88;
+  const diagLen = len * 0.58;
+  return (
+    <View style={[styles.center, { width: size, height: size }, style]}>
+      <View style={{ position: 'absolute', width: arm, height: len, backgroundColor: color, borderRadius: arm / 2 }} />
+      <View style={{ position: 'absolute', width: len, height: arm, backgroundColor: color, borderRadius: arm / 2 }} />
+      <View style={{ position: 'absolute', width: arm * 0.8, height: diagLen, backgroundColor: color, borderRadius: arm / 2, transform: [{ rotate: '45deg' }] }} />
+      <View style={{ position: 'absolute', width: arm * 0.8, height: diagLen, backgroundColor: color, borderRadius: arm / 2, transform: [{ rotate: '-45deg' }] }} />
+      <View style={{ position: 'absolute', width: arm * 1.8, height: arm * 1.8, borderRadius: arm, backgroundColor: color }} />
     </View>
-  </View>
-);
+  );
+};
 
 export const BoltIcon: React.FC<IconProps> = ({ size = 14, color = '#10b981', style }) => (
   <View style={[styles.center, { width: size, height: size }, style]}>

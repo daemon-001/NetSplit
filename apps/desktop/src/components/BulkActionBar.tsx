@@ -33,6 +33,9 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
     (a) => a.type === 'WIFI' || a.type === 'ETHERNET' || a.type === 'CELLULAR'
   );
 
+  const connectedAdapters = hardwareAdapters.filter((a) => a.status === 'UP');
+  const disconnectedAdapters = hardwareAdapters.filter((a) => a.status !== 'UP');
+
   const effectiveDefaultId = settings.defaultAdapterId || adapters.find((a) => a.isDefaultRoute)?.id;
   const defaultAdapter = getDefaultAdapter(adapters, effectiveDefaultId);
   const oppositeAdapter = getOppositeAdapter(adapters, effectiveDefaultId);
@@ -130,15 +133,20 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
               </TouchableOpacity>
             </View>
 
-            {/* Adapters List with clear UP / DOWN Network Status */}
-            <ScrollView style={styles.adapterList} showsVerticalScrollIndicator={false}>
+            {/* Adapters List with clean card layout and prioritized connected adapters */}
+            <ScrollView style={styles.adapterList} contentContainerStyle={{ paddingBottom: 16 }} showsVerticalScrollIndicator={true}>
+              {/* Dynamic Modes Header */}
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>DYNAMIC ROUTING MODES</Text>
+              </View>
+
               {/* Dynamic Default Adapter Option */}
               <TouchableOpacity
                 style={[
-                  styles.adapterRow,
+                  styles.optionCard,
                   {
-                    borderBottomColor: theme.borderSubtle,
-                    backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5',
+                    borderColor: theme.borderSubtle,
+                    backgroundColor: theme.surfaceSubtle,
                   },
                 ]}
                 onPress={() => handleBulkAssign('DEFAULT_ADAPTER')}
@@ -147,40 +155,26 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                   style={[
                     styles.iconBox,
                     {
-                      backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.25)' : '#d1fae5',
+                      backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5',
                     },
                   ]}
                 >
-                  <StarIcon size={16} color={themeMode === 'dark' ? '#6ee7b7' : '#059669'} />
+                  <StarIcon size={14} color={themeMode === 'dark' ? '#34d399' : '#059669'} />
                 </View>
 
-                <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flex: 1, marginLeft: 10 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text
-                      style={[
-                        styles.adapterName,
-                        { color: themeMode === 'dark' ? '#6ee7b7' : '#047857', fontWeight: '700' },
-                      ]}
-                      numberOfLines={1}
-                    >
+                    <Text style={[styles.adapterName, { color: theme.textPrimary }]} numberOfLines={1}>
                       Default Adapter
                     </Text>
-                    <View
-                      style={{
-                        backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.35)' : '#a7f3d0',
-                        paddingHorizontal: 5,
-                        paddingVertical: 1,
-                        borderRadius: 3,
-                        marginLeft: 6,
-                      }}
-                    >
-                      <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#6ee7b7' : '#047857', fontWeight: '700' }}>
+                    <View style={[styles.dynamicPill, { backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.2)' : '#d1fae5' }]}>
+                      <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#34d399' : '#059669', fontWeight: '700' }}>
                         DYNAMIC
                       </Text>
                     </View>
                   </View>
                   <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
-                    Dynamically follows default connection (currently: {defaultAdapter?.friendlyName || 'Auto'})
+                    Follows system default connection ({defaultAdapter?.friendlyName || 'Auto'})
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -188,11 +182,11 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
               {/* Dynamic Opposite to Default Adapter Option */}
               <TouchableOpacity
                 style={[
-                  styles.adapterRow,
+                  styles.optionCard,
                   {
-                    borderBottomColor: theme.borderSubtle,
-                    backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.12)' : '#f5f3ff',
-                    opacity: hardwareAdapters.length < 2 ? 0.5 : 1,
+                    borderColor: theme.borderSubtle,
+                    backgroundColor: theme.surfaceSubtle,
+                    opacity: hardwareAdapters.length < 2 ? 0.45 : 1,
                   },
                 ]}
                 disabled={hardwareAdapters.length < 2}
@@ -202,54 +196,40 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                   style={[
                     styles.iconBox,
                     {
-                      backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.25)' : '#ede9fe',
+                      backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.15)' : '#ede9fe',
                     },
                   ]}
                 >
-                  <SwapIcon size={16} color={themeMode === 'dark' ? '#c4b5fd' : '#7c3aed'} />
+                  <SwapIcon size={14} color={themeMode === 'dark' ? '#a78bfa' : '#7c3aed'} />
                 </View>
 
-                <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flex: 1, marginLeft: 10 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text
-                      style={[
-                        styles.adapterName,
-                        { color: themeMode === 'dark' ? '#c4b5fd' : '#6d28d9', fontWeight: '700' },
-                      ]}
-                      numberOfLines={1}
-                    >
+                    <Text style={[styles.adapterName, { color: theme.textPrimary }]} numberOfLines={1}>
                       Opposite to Default Adapter
                     </Text>
-                    <View
-                      style={{
-                        backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.35)' : '#ddd6fe',
-                        paddingHorizontal: 5,
-                        paddingVertical: 1,
-                        borderRadius: 3,
-                        marginLeft: 6,
-                      }}
-                    >
-                      <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#ddd6fe' : '#5b21b6', fontWeight: '700' }}>
+                    <View style={[styles.dynamicPill, { backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.2)' : '#ddd6fe' }]}>
+                      <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#a78bfa' : '#7c3aed', fontWeight: '700' }}>
                         DYNAMIC
                       </Text>
                     </View>
                   </View>
                   <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
                     {hardwareAdapters.length >= 2
-                      ? `Dynamically follows non-default connection (currently: ${oppositeAdapter?.friendlyName || 'Secondary'})`
-                      : 'Requires at least 2 network adapters'}
+                      ? `Follows secondary connection (${oppositeAdapter?.friendlyName || 'Alternate'})`
+                      : 'Requires at least 2 active network adapters'}
                   </Text>
                 </View>
               </TouchableOpacity>
 
-              <View style={{ paddingHorizontal: spacing.sm, paddingTop: 10, paddingBottom: 4 }}>
-                <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.5 }}>
-                  SPECIFIC HARDWARE ADAPTERS
+              {/* Connected Interfaces Header */}
+              <View style={[styles.sectionHeaderRow, { marginTop: 10 }]}>
+                <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
+                  CONNECTED INTERFACES ({connectedAdapters.length})
                 </Text>
               </View>
 
-              {hardwareAdapters.map((a) => {
-                const isUp = a.status === 'UP';
+              {connectedAdapters.map((a) => {
                 const isDefault =
                   settings.defaultRoutingPolicy === 'PREFER_ADAPTER'
                     ? settings.defaultAdapterId === a.id
@@ -259,10 +239,10 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                   <TouchableOpacity
                     key={a.id}
                     style={[
-                      styles.adapterRow,
+                      styles.optionCard,
                       {
-                        borderBottomColor: theme.borderSubtle,
-                        backgroundColor: theme.surfaceCard,
+                        borderColor: isDefault ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.4)' : '#6ee7b7') : theme.borderSubtle,
+                        backgroundColor: theme.surfaceSubtle,
                       },
                     ]}
                     onPress={() => handleBulkAssign(a.id)}
@@ -271,50 +251,82 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                       style={[
                         styles.iconBox,
                         {
-                          backgroundColor: isUp
-                            ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5')
-                            : (themeMode === 'dark' ? 'rgba(239, 68, 68, 0.12)' : '#fef2f2'),
+                          backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5',
                         },
                       ]}
                     >
                       {a.type === 'WIFI' ? (
-                        <WifiIcon size={16} color={isUp ? (themeMode === 'dark' ? '#34d399' : '#059669') : theme.textTertiary} />
+                        <WifiIcon size={15} color={theme.success} />
                       ) : (
-                        <EthernetIcon size={16} color={isUp ? (themeMode === 'dark' ? '#34d399' : '#059669') : theme.textTertiary} />
+                        <EthernetIcon size={15} color={theme.success} />
                       )}
                     </View>
 
-                    <View style={{ flex: 1, marginLeft: 12 }}>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Text style={[styles.adapterName, { color: theme.textPrimary }]} numberOfLines={1}>
                           {a.friendlyName}
                         </Text>
                         {isDefault && (
-                          <View
-                            style={{
-                              backgroundColor: theme.accentSubtle,
-                              paddingHorizontal: 5,
-                              paddingVertical: 1,
-                              borderRadius: 3,
-                              marginLeft: 6,
-                            }}
-                          >
-                            <Text style={{ fontSize: 9, color: theme.accent, fontWeight: '700' }}>DEFAULT</Text>
+                          <View style={[styles.defaultTag, { backgroundColor: theme.accentSubtle, borderColor: theme.accent }]}>
+                            <Text style={[styles.defaultTagText, { color: theme.accent }]}>DEFAULT</Text>
                           </View>
                         )}
                       </View>
                       <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
-                        {a.type} • {a.ipv4Addresses?.[0] || 'No IPv4'}
+                        {a.type} • {a.ipv4Addresses?.[0] || 'DHCP'}
                       </Text>
                     </View>
 
-                    {/* Network Status Badge (UP / DOWN) */}
-                    <View style={styles.statusCol}>
-                      <StatusBadge status={a.status} size="sm" />
-                    </View>
+                    <StatusBadge status={a.status} size="sm" />
                   </TouchableOpacity>
                 );
               })}
+
+              {/* Disconnected Interfaces (if any) */}
+              {disconnectedAdapters.length > 0 && (
+                <>
+                  <View style={[styles.sectionHeaderRow, { marginTop: 10 }]}>
+                    <Text style={[styles.sectionTitle, { color: theme.textTertiary }]}>
+                      DISCONNECTED / OFFLINE ({disconnectedAdapters.length})
+                    </Text>
+                  </View>
+
+                  {disconnectedAdapters.map((a) => (
+                    <TouchableOpacity
+                      key={a.id}
+                      style={[
+                        styles.optionCard,
+                        {
+                          borderColor: theme.borderSubtle,
+                          backgroundColor: theme.surfaceSubtle,
+                          opacity: 0.6,
+                        },
+                      ]}
+                      onPress={() => handleBulkAssign(a.id)}
+                    >
+                      <View style={[styles.iconBox, { backgroundColor: theme.surfaceHover }]}>
+                        {a.type === 'WIFI' ? (
+                          <WifiIcon size={15} color={theme.textTertiary} />
+                        ) : (
+                          <EthernetIcon size={15} color={theme.textTertiary} />
+                        )}
+                      </View>
+
+                      <View style={{ flex: 1, marginLeft: 10 }}>
+                        <Text style={[styles.adapterName, { color: theme.textSecondary }]} numberOfLines={1}>
+                          {a.friendlyName}
+                        </Text>
+                        <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
+                          {a.type} • Disconnected
+                        </Text>
+                      </View>
+
+                      <StatusBadge status={a.status} size="sm" />
+                    </TouchableOpacity>
+                  ))}
+                </>
+              )}
             </ScrollView>
           </View>
         </TouchableOpacity>
@@ -405,16 +417,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   pickerModal: {
-    width: 440,
-    maxHeight: '80%',
-    borderRadius: radii.md,
+    width: 480,
+    maxHeight: '85%',
+    borderRadius: radii.lg,
     borderWidth: 1,
     padding: spacing.lg,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 20,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.45,
+    shadowRadius: 28,
+    elevation: 24,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -422,10 +434,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
-    marginBottom: spacing.xs,
+    marginBottom: spacing.sm,
   },
   pickerTitle: {
-    fontFamily: typography.fontFamily,
+    fontFamily: typography.fontFamilyDisplay,
     fontSize: typography.sizes.sm,
     fontWeight: typography.weights.bold,
   },
@@ -443,23 +455,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginLeft: 12,
   },
-  closeBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 14,
-  },
   adapterList: {
-    maxHeight: 340,
+    maxHeight: 440,
   },
-  adapterRow: {
+  sectionHeaderRow: {
+    paddingHorizontal: 2,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
+  sectionTitle: {
+    fontFamily: typography.fontFamily,
+    fontSize: 9,
+    fontWeight: typography.weights.bold,
+    letterSpacing: 0.6,
+  },
+  optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    marginBottom: 6,
+  },
+  dynamicPill: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    marginLeft: 6,
+  },
+  defaultTag: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: 1,
+    marginLeft: 6,
+  },
+  defaultTagText: {
+    fontSize: 9,
+    fontWeight: '700',
   },
   iconBox: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
@@ -473,9 +511,5 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamily,
     fontSize: 10,
     marginTop: 2,
-  },
-  statusCol: {
-    marginLeft: 10,
-    alignItems: 'flex-end',
   },
 });

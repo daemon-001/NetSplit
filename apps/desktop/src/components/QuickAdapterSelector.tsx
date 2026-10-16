@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, ScrollView } from 'react-native';
 import { useNetSplitStore, getOppositeAdapter, getDefaultAdapter } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { ChevronDownIcon, CheckIcon, WifiIcon, EthernetIcon, SwapIcon, StarIcon } from './Icons';
@@ -35,6 +35,9 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
   const hardwareAdapters = adapters.filter(
     (a) => a.type === 'WIFI' || a.type === 'ETHERNET' || a.type === 'CELLULAR'
   );
+
+  const connectedAdapters = hardwareAdapters.filter((a) => a.status === 'UP');
+  const disconnectedAdapters = hardwareAdapters.filter((a) => a.status !== 'UP');
 
   const isOpposite = propIsOpposite || oppositeDefaultAppIds.includes(applicationId);
   const isFollow = propIsFollow || followDefaultAppIds.includes(applicationId);
@@ -149,171 +152,231 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
               <Text style={[styles.menuTitle, { color: theme.textTertiary }]}>ASSIGN NETWORK ADAPTER</Text>
             </View>
 
-            {/* 1. Dynamic Default Adapter Option */}
-            <TouchableOpacity
-              style={[
-                styles.optionRow,
-                {
-                  backgroundColor: (isFollow || (!isAssigned && !isOpposite))
-                    ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.18)' : '#ecfdf5')
-                    : 'transparent',
-                },
-              ]}
-              onPress={() => handleSelectAdapter('DEFAULT_ADAPTER')}
-            >
-              <View style={styles.adapterIconBox}>
-                <StarIcon size={14} color={(isFollow || (!isAssigned && !isOpposite)) ? (themeMode === 'dark' ? '#6ee7b7' : '#059669') : theme.textSecondary} />
-              </View>
-
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text
-                    style={[
-                      styles.optionName,
-                      {
-                        color: (isFollow || (!isAssigned && !isOpposite)) ? (themeMode === 'dark' ? '#6ee7b7' : '#047857') : theme.textPrimary,
-                        fontWeight: '600',
-                      },
-                    ]}
-                  >
-                    Default Adapter
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.25)' : '#d1fae5',
-                      paddingHorizontal: 4,
-                      paddingVertical: 1,
-                      borderRadius: 3,
-                      marginLeft: 6,
-                    }}
-                  >
-                    <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#34d399' : '#059669', fontWeight: 'bold' }}>
-                      DYNAMIC
-                    </Text>
-                  </View>
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={true}>
+              {/* 1. Dynamic Default Adapter Option */}
+              <TouchableOpacity
+                style={[
+                  styles.optionRow,
+                  {
+                    backgroundColor: (isFollow || (!isAssigned && !isOpposite))
+                      ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5')
+                      : 'transparent',
+                  },
+                ]}
+                onPress={() => handleSelectAdapter('DEFAULT_ADAPTER')}
+              >
+                <View style={styles.adapterIconBox}>
+                  <StarIcon size={14} color={(isFollow || (!isAssigned && !isOpposite)) ? (themeMode === 'dark' ? '#34d399' : '#059669') : theme.textSecondary} />
                 </View>
 
-                <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
-                  Always routes via default connection (currently: {defaultAdapter?.friendlyName || 'Auto'})
-                </Text>
-              </View>
-
-              {(isFollow || (!isAssigned && !isOpposite)) && <CheckIcon size={14} color={themeMode === 'dark' ? '#34d399' : '#059669'} />}
-            </TouchableOpacity>
-
-            {/* 2. Dynamic Opposite to Default Adapter option */}
-            <TouchableOpacity
-              style={[
-                styles.optionRow,
-                {
-                  backgroundColor: isOpposite
-                    ? (themeMode === 'dark' ? 'rgba(139, 92, 246, 0.18)' : '#f3e8ff')
-                    : 'transparent',
-                },
-              ]}
-              onPress={() => handleSelectAdapter('OPPOSITE_DEFAULT')}
-            >
-              <View style={styles.adapterIconBox}>
-                <SwapIcon size={14} color={isOpposite ? (themeMode === 'dark' ? '#c4b5fd' : '#7c3aed') : theme.textSecondary} />
-              </View>
-
-              <View style={{ flex: 1, marginLeft: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text
-                    style={[
-                      styles.optionName,
-                      {
-                        color: isOpposite ? (themeMode === 'dark' ? '#c4b5fd' : '#6d28d9') : theme.textPrimary,
-                        fontWeight: '600',
-                      },
-                    ]}
-                  >
-                    Opposite to Default Adapter
-                  </Text>
-                  <View
-                    style={{
-                      backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.25)' : '#ede9fe',
-                      paddingHorizontal: 4,
-                      paddingVertical: 1,
-                      borderRadius: 3,
-                      marginLeft: 6,
-                    }}
-                  >
-                    <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#a78bfa' : '#6d28d9', fontWeight: 'bold' }}>
-                      DYNAMIC
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text
+                      style={[
+                        styles.optionName,
+                        {
+                          color: (isFollow || (!isAssigned && !isOpposite)) ? (themeMode === 'dark' ? '#34d399' : '#047857') : theme.textPrimary,
+                          fontWeight: '600',
+                        },
+                      ]}
+                    >
+                      Default Adapter
                     </Text>
-                  </View>
-                </View>
-
-                <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
-                  Always routes via non-default link (currently: {oppositeAdapter?.friendlyName || 'Auto'})
-                </Text>
-              </View>
-
-              {isOpposite && <CheckIcon size={14} color={themeMode === 'dark' ? '#a78bfa' : '#7c3aed'} />}
-            </TouchableOpacity>
-
-            <View style={[styles.divider, { backgroundColor: theme.borderSubtle }]} />
-
-            <View style={{ paddingHorizontal: spacing.sm, paddingVertical: 3 }}>
-              <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.5 }}>
-                SPECIFIC ADAPTERS
-              </Text>
-            </View>
-
-            {/* Hardware Adapters List */}
-            {hardwareAdapters.map((a) => {
-              const isSelected = !isOpposite && !isFollow && assignedAdapterId === a.id;
-              const isUp = a.status === 'UP';
-
-              return (
-                <TouchableOpacity
-                  key={a.id}
-                  style={[
-                    styles.optionRow,
-                    {
-                      backgroundColor: isSelected ? theme.surfaceActive : 'transparent',
-                    },
-                  ]}
-                  onPress={() => handleSelectAdapter(a.id)}
-                >
-                  <View style={styles.adapterIconBox}>
-                    {a.type === 'WIFI' ? (
-                      <WifiIcon size={14} color={isUp ? theme.textPrimary : theme.textTertiary} />
-                    ) : (
-                      <EthernetIcon size={14} color={isUp ? theme.textPrimary : theme.textTertiary} />
-                    )}
-                  </View>
-
-                  <View style={{ flex: 1, marginLeft: 8 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Text style={[styles.optionName, { color: theme.textPrimary, flex: 1 }]} numberOfLines={1}>
-                        {a.friendlyName}
+                    <View
+                      style={{
+                        backgroundColor: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.2)' : '#d1fae5',
+                        paddingHorizontal: 4,
+                        paddingVertical: 1,
+                        borderRadius: 3,
+                        marginLeft: 6,
+                      }}
+                    >
+                      <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#34d399' : '#059669', fontWeight: 'bold' }}>
+                        DYNAMIC
                       </Text>
-                      {((settings.defaultRoutingPolicy === 'PREFER_ADAPTER' ? settings.defaultAdapterId === a.id : a.isDefaultRoute) || a.id === effectiveDefaultId) && (
-                        <View style={{ backgroundColor: theme.accentSubtle, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, marginLeft: 4 }}>
-                          <Text style={{ fontSize: 9, color: theme.accent, fontWeight: 'bold' }}>DEFAULT</Text>
-                        </View>
-                      )}
-                      <View
-                        style={[
-                          styles.statusDot,
-                          { backgroundColor: isUp ? theme.success : theme.error, marginLeft: 6 },
-                        ]}
-                      />
                     </View>
-                    <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
-                      {a.description}
+                  </View>
+
+                  <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
+                    Always routes via default connection ({defaultAdapter?.friendlyName || 'Auto'})
+                  </Text>
+                </View>
+
+                {(isFollow || (!isAssigned && !isOpposite)) && <CheckIcon size={14} color={themeMode === 'dark' ? '#34d399' : '#059669'} />}
+              </TouchableOpacity>
+
+              {/* 2. Dynamic Opposite to Default Adapter option */}
+              <TouchableOpacity
+                style={[
+                  styles.optionRow,
+                  {
+                    backgroundColor: isOpposite
+                      ? (themeMode === 'dark' ? 'rgba(139, 92, 246, 0.15)' : '#f3e8ff')
+                      : 'transparent',
+                    opacity: hardwareAdapters.length < 2 ? 0.45 : 1,
+                  },
+                ]}
+                disabled={hardwareAdapters.length < 2}
+                onPress={() => handleSelectAdapter('OPPOSITE_DEFAULT')}
+              >
+                <View style={styles.adapterIconBox}>
+                  <SwapIcon size={14} color={isOpposite ? (themeMode === 'dark' ? '#a78bfa' : '#7c3aed') : theme.textSecondary} />
+                </View>
+
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text
+                      style={[
+                        styles.optionName,
+                        {
+                          color: isOpposite ? (themeMode === 'dark' ? '#a78bfa' : '#6d28d9') : theme.textPrimary,
+                          fontWeight: '600',
+                        },
+                      ]}
+                    >
+                      Opposite to Default Adapter
                     </Text>
-                    <Text style={[styles.optionSub, { color: isUp ? theme.textSecondary : theme.textTertiary, fontSize: 10 }]}>
-                      {(a.ipv4Addresses && a.ipv4Addresses.length > 0) ? a.ipv4Addresses[0] : 'No IPv4'} • {a.type} • {a.status}
+                    <View
+                      style={{
+                        backgroundColor: themeMode === 'dark' ? 'rgba(139, 92, 246, 0.2)' : '#ede9fe',
+                        paddingHorizontal: 4,
+                        paddingVertical: 1,
+                        borderRadius: 3,
+                        marginLeft: 6,
+                      }}
+                    >
+                      <Text style={{ fontSize: 9, color: themeMode === 'dark' ? '#a78bfa' : '#6d28d9', fontWeight: 'bold' }}>
+                        DYNAMIC
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
+                    {hardwareAdapters.length >= 2
+                      ? `Always routes via non-default link (${oppositeAdapter?.friendlyName || 'Alternate'})`
+                      : 'Requires at least 2 active network adapters'}
+                  </Text>
+                </View>
+
+                {isOpposite && <CheckIcon size={14} color={themeMode === 'dark' ? '#a78bfa' : '#7c3aed'} />}
+              </TouchableOpacity>
+
+              <View style={[styles.divider, { backgroundColor: theme.borderSubtle }]} />
+
+              {/* Connected Interfaces Header */}
+              <View style={{ paddingHorizontal: spacing.sm, paddingVertical: 4 }}>
+                <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.5 }}>
+                  CONNECTED INTERFACES ({connectedAdapters.length})
+                </Text>
+              </View>
+
+              {connectedAdapters.map((a) => {
+                const isSelected = !isOpposite && !isFollow && assignedAdapterId === a.id;
+                const isDefault = ((settings.defaultRoutingPolicy === 'PREFER_ADAPTER' ? settings.defaultAdapterId === a.id : a.isDefaultRoute) || a.id === effectiveDefaultId);
+
+                return (
+                  <TouchableOpacity
+                    key={a.id}
+                    style={[
+                      styles.optionRow,
+                      {
+                        backgroundColor: isSelected ? theme.surfaceActive : 'transparent',
+                      },
+                    ]}
+                    onPress={() => handleSelectAdapter(a.id)}
+                  >
+                    <View style={styles.adapterIconBox}>
+                      {a.type === 'WIFI' ? (
+                        <WifiIcon size={14} color={theme.success} />
+                      ) : (
+                        <EthernetIcon size={14} color={theme.success} />
+                      )}
+                    </View>
+
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={[styles.optionName, { color: theme.textPrimary, flex: 1 }]} numberOfLines={1}>
+                          {a.friendlyName}
+                        </Text>
+                        {isDefault && (
+                          <View style={{ backgroundColor: theme.accentSubtle, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3, marginLeft: 4 }}>
+                            <Text style={{ fontSize: 9, color: theme.accent, fontWeight: 'bold' }}>DEFAULT</Text>
+                          </View>
+                        )}
+                        <View
+                          style={[
+                            styles.statusDot,
+                            { backgroundColor: theme.success, marginLeft: 6 },
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
+                        {(a.ipv4Addresses && a.ipv4Addresses.length > 0) ? a.ipv4Addresses[0] : 'DHCP'} • {a.type}
+                      </Text>
+                    </View>
+
+                    {isSelected && <CheckIcon size={14} color={theme.accent} />}
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* Disconnected Interfaces Header & List */}
+              {disconnectedAdapters.length > 0 && (
+                <>
+                  <View style={[styles.divider, { backgroundColor: theme.borderSubtle }]} />
+                  <View style={{ paddingHorizontal: spacing.sm, paddingVertical: 4 }}>
+                    <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.5 }}>
+                      DISCONNECTED / OFFLINE ({disconnectedAdapters.length})
                     </Text>
                   </View>
 
-                  {isSelected && <CheckIcon size={14} color={theme.accent} />}
-                </TouchableOpacity>
-              );
-            })}
+                  {disconnectedAdapters.map((a) => {
+                    const isSelected = !isOpposite && !isFollow && assignedAdapterId === a.id;
+
+                    return (
+                      <TouchableOpacity
+                        key={a.id}
+                        style={[
+                          styles.optionRow,
+                          {
+                            backgroundColor: isSelected ? theme.surfaceActive : 'transparent',
+                            opacity: 0.6,
+                          },
+                        ]}
+                        onPress={() => handleSelectAdapter(a.id)}
+                      >
+                        <View style={styles.adapterIconBox}>
+                          {a.type === 'WIFI' ? (
+                            <WifiIcon size={14} color={theme.textTertiary} />
+                          ) : (
+                            <EthernetIcon size={14} color={theme.textTertiary} />
+                          )}
+                        </View>
+
+                        <View style={{ flex: 1, marginLeft: 8 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Text style={[styles.optionName, { color: theme.textSecondary, flex: 1 }]} numberOfLines={1}>
+                              {a.friendlyName}
+                            </Text>
+                            <View
+                              style={[
+                                styles.statusDot,
+                                { backgroundColor: theme.textTertiary, marginLeft: 6 },
+                              ]}
+                            />
+                          </View>
+                          <Text style={[styles.optionSub, { color: theme.textTertiary }]} numberOfLines={1}>
+                            {a.type} • Disconnected
+                          </Text>
+                        </View>
+
+                        {isSelected && <CheckIcon size={14} color={theme.accent} />}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </>
+              )}
+            </ScrollView>
           </View>
         </TouchableOpacity>
       </Modal>
@@ -346,7 +409,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dropdownMenu: {
-    width: 320,
+    width: 360,
+    maxHeight: 460,
     borderRadius: radii.md,
     borderWidth: 1,
     padding: spacing.xs,
