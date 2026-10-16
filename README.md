@@ -4,7 +4,7 @@
 [![UI](https://img.shields.io/badge/UI-React%20Native%20for%20Windows-61DAFB?logo=react)](https://microsoft.github.io/react-native-windows/)
 [![Language](https://img.shields.io/badge/Backend-C%2B%2B17%20%2F%20WFP-00599C?logo=c%2B%2B)](https://learn.microsoft.com/windows/win32/fwp/windows-filtering-platform-start-page)
 [![Tests](https://img.shields.io/badge/Tests-18%20Passing-107c41)](#automated-testing)
-[![Anti-Cheat](https://img.shields.io/badge/Anti--Cheat-Safe%20and%20Compliant-107c41)](#zero-tampering-and-anti-cheat-compliance)
+[![Anti-Cheat](https://img.shields.io/badge/Anti--Cheat-Safe%20and%20Compliant-107c41)](#core-guarantees)
 
 NetSplit is a high-performance Windows 11 utility designed to bind individual desktop applications, games, and background tasks to specific network adapters (such as Ethernet, Wi-Fi, 4G/5G USB tethering, or secondary network cards) without modifying application binaries, injecting DLLs, or changing the global Windows default routing table.
 
@@ -223,6 +223,35 @@ When opening NetSplit for the first time or after uninstallation, the app runs c
 - Click the prominent **Install Windows Service** button on the Overview card.
 - Approve the standard Windows UAC prompt once.
 - NetSplit registers the Windows Service, connects the secure IPC client, and activates rule enforcement.
+
+### 5. Build Standalone Production Release
+To build a clean, self-contained release package ready for distribution:
+```powershell
+npm run release
+```
+This automated command:
+1. Compiles the native C++ Windows Service daemon and router DLLs with MSVC.
+2. Compiles the native `NetSplit.exe` launcher with the custom icon resource embedded.
+3. Compiles the production frontend web bundle using Vite.
+4. Executes the complete 18-test unit and integration test suite.
+5. Packages a clean distribution into `release/NetSplit-v1.0.0-windows-x64/` and compresses it into `release/NetSplit-v1.0.0-windows-x64.zip`.
+
+---
+
+## Standalone Release Requirements
+
+The packaged distribution in `release/NetSplit-v1.0.0-windows-x64` is completely self-contained and requires no prerequisites:
+- Operating System: Windows 10 or Windows 11 (64-bit / x64).
+- User Privileges: Standard Windows Administrator rights (prompted via standard UAC on launch to configure routing rules).
+- Node.js or npm: Not required. The standalone Electron runtime is bundled in the `runtime/` folder.
+- Visual C++ Redistributable: Not required. Native binaries link exclusively to standard Windows system DLLs (`kernel32`, `user32`, `advapi32`, `ws2_32`, `iphlpapi`, `fwpuclnt`, `bcrypt`).
+- Custom Kernel Drivers: Not required. Routing is performed via Microsoft's built-in Windows Filtering Platform (WFP) and IP Helper APIs.
+- Python or Build Tools: Not required. All native binaries and frontend assets are pre-compiled and sealed into `app.asar`.
+
+To run from release:
+1. Extract the `NetSplit-v1.0.0-windows-x64.zip` archive or open the release folder.
+2. Double-click `NetSplit.exe`.
+3. Accept the standard Windows UAC elevation prompt. The desktop interface opens immediately.
 
 ---
 

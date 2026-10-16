@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -7,11 +7,32 @@ let mainWindow = null;
 let serviceProcess = null;
 
 function getServicePath() {
-  const devPath = path.resolve(__dirname, '../../../native/windows-service/NetSplitService.exe');
-  if (fs.existsSync(devPath)) return devPath;
-  const prodPath = path.resolve(process.resourcesPath || '', 'native/NetSplitService.exe');
-  if (fs.existsSync(prodPath)) return prodPath;
-  return devPath;
+  const candidates = [
+    path.resolve(__dirname, '../../../native/windows-service/NetSplitService.exe'),
+    path.resolve(process.resourcesPath || '', '../../native/windows-service/NetSplitService.exe'),
+    path.resolve(process.resourcesPath || '', '../native/windows-service/NetSplitService.exe'),
+    path.resolve(process.resourcesPath || '', 'native/windows-service/NetSplitService.exe'),
+    path.resolve(process.resourcesPath || '', 'native/NetSplitService.exe'),
+    path.resolve(process.cwd(), 'native/windows-service/NetSplitService.exe'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0];
+}
+
+function getScriptPath(scriptName) {
+  const candidates = [
+    path.resolve(__dirname, `../../../scripts/${scriptName}`),
+    path.resolve(process.resourcesPath || '', `../../scripts/${scriptName}`),
+    path.resolve(process.resourcesPath || '', `../scripts/${scriptName}`),
+    path.resolve(process.resourcesPath || '', `scripts/${scriptName}`),
+    path.resolve(process.cwd(), `scripts/${scriptName}`),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0];
 }
 
 function getToken() {
@@ -103,10 +124,9 @@ async function ensureServiceRunning() {
   console.log('[Electron] NetSplitService is not running. Awaiting user installation or start from UI.');
 }
 
-async function createWindow() {
-  await ensureServiceRunning();
-
+function createWindow() {
   const iconPath = path.resolve(__dirname, 'icon.png');
+  console.log('[Electron] Creating BrowserWindow...');
 
   mainWindow = new BrowserWindow({
     width: 1240,
@@ -117,6 +137,7 @@ async function createWindow() {
     title: 'NetSplit',
     icon: iconPath,
     autoHideMenuBar: true,
+    show: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -126,9 +147,39 @@ async function createWindow() {
   });
 
   const indexPath = path.join(__dirname, '../dist/index.html');
+  console.log('[Electron] __dirname:', __dirname);
+  console.log('[Electron] indexPath:', indexPath, 'exists:', fs.existsSync(indexPath));
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[Electron] webContents did-finish-load successfully');
+  });
+
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error('[Electron] did-fail-load:', code, desc, url);
+  });
+
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    console.log(`[Renderer Console] [level ${level}] ${message} (${sourceId}:${line})`);
+  });
+
+  mainWindow.on('close', () => {
+    console.log('[Electron] mainWindow close event received');
+  });
+
+  mainWindow.on('closed', () => {
+    console.log('[Electron] mainWindow closed event received');
+    mainWindow = null;
+  });
+
   if (fs.existsSync(indexPath) && !process.env.VITE_DEV_SERVER) {
-    mainWindow.loadFile(indexPath);
+    console.log('[Electron] Loading local file:', indexPath);
+    mainWindow.loadFile(indexPath).then(() => {
+      console.log('[Electron] loadFile promise resolved');
+    }).catch((err) => {
+      console.error('[Electron] loadFile promise rejected:', err);
+    });
   } else {
+    console.log('[Electron] Loading dev URL: http://localhost:3000');
     mainWindow.loadURL('http://localhost:3000').catch(() => {
       if (fs.existsSync(indexPath)) {
         mainWindow.loadFile(indexPath);
@@ -136,8 +187,12 @@ async function createWindow() {
     });
   }
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
+  mainWindow.show();
+  mainWindow.focus();
+
+  // Check service asynchronously without delaying window appearance
+  ensureServiceRunning().catch((err) => {
+    console.warn('[Electron] Service check error:', err ? err.message : err);
   });
 }
 
@@ -151,7 +206,7 @@ ipcMain.handle('get-token', async () => {
 });
 
 ipcMain.handle('elevate-service', async () => {
-  const scriptPath = path.resolve(__dirname, '../../../scripts/elevate-service.ps1');
+  const scriptPath = getScriptPath('elevate-service.ps1');
   const { exec } = require('child_process');
   
   console.log('[Electron] Requesting elevated service restart via helper script...');
@@ -211,7 +266,7 @@ ipcMain.handle('elevate-service', async () => {
 });
 
 ipcMain.handle('install-service', async () => {
-  const scriptPath = path.resolve(__dirname, '../../../scripts/install-service.ps1');
+  const scriptPath = getScriptPath('install-service.ps1');
   const { exec } = require('child_process');
   
   console.log('[Electron] Requesting service installation via helper script...');
@@ -239,7 +294,7 @@ ipcMain.handle('install-service', async () => {
 });
 
 ipcMain.handle('uninstall-service', async () => {
-  const scriptPath = path.resolve(__dirname, '../../../scripts/uninstall-service.ps1');
+  const scriptPath = getScriptPath('uninstall-service.ps1');
   const { exec } = require('child_process');
   
   console.log('[Electron] Requesting clean service uninstallation via helper script...');
@@ -284,33 +339,8 @@ ipcMain.handle('uninstall-service', async () => {
   return { success: true };
 });
 
-let cachedWindows = [];
-let lastWindowFetchTime = 0;
-
 ipcMain.handle('get-visible-windows', async () => {
-  const now = Date.now();
-  if (cachedWindows.length > 0 && now - lastWindowFetchTime < 30000) {
-    return cachedWindows;
-  }
-
-  try {
-    if (desktopCapturer && typeof desktopCapturer.getSources === 'function') {
-      const sources = await desktopCapturer.getSources({
-        types: ['window'],
-        fetchWindowIcons: false,
-        thumbnailSize: { width: 0, height: 0 },
-      });
-      cachedWindows = sources.map((s) => ({
-        id: s.id,
-        name: s.name,
-      }));
-      lastWindowFetchTime = now;
-      return cachedWindows;
-    }
-  } catch (err) {
-    console.warn('[Electron] Could not enumerate desktop window sources:', err ? err.message : err);
-  }
-  return cachedWindows;
+  return [];
 });
 
 
@@ -319,10 +349,24 @@ if (process.platform === 'win32') {
 }
 app.setName('NetSplit');
 
-app.whenReady().then(createWindow);
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  app.whenReady().then(createWindow);
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
+

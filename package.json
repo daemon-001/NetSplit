@@ -13,7 +13,8 @@
     "build:types": "npm run build --workspace=@netsplit/shared-types",
     "build:service": "call native\\windows-service\\build.bat",
     "test": "node --test tests/unit/*.test.js tests/integration/*.test.js",
-    "test:ipc": "powershell -ExecutionPolicy Bypass -File test_wifi_assign.ps1"
+    "test:ipc": "powershell -ExecutionPolicy Bypass -File test_wifi_assign.ps1",
+    "release": "powershell -ExecutionPolicy Bypass -File scripts/package-release.ps1"
   },
   "devDependencies": {
     "@types/react": "^18.3.1",

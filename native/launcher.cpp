@@ -10,6 +10,8 @@
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "user32.lib")
+#pragma comment(lib, "shell32.lib")
 
 static bool IsElevated() {
     BOOL isElevated = FALSE;
@@ -37,85 +39,45 @@ static void EnableDebugPrivilege() {
     }
 }
 
-static bool IsPortResponding(int port) {
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) return false;
+struct WindowCheckData {
+    DWORD pid;
+    bool hasVisible;
+};
 
-    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s == INVALID_SOCKET) {
-        WSACleanup();
-        return false;
+static BOOL CALLBACK EnumWindowsCallback(HWND hwnd, LPARAM lParam) {
+    WindowCheckData* data = (WindowCheckData*)lParam;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == data->pid && IsWindowVisible(hwnd)) {
+        data->hasVisible = true;
+        return FALSE;
     }
-
-    DWORD timeout = 400;
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
-    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
-
-    sockaddr_in addr = { 0 };
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    addr.sin_port = htons(port);
-
-    bool ok = (connect(s, (sockaddr*)&addr, sizeof(addr)) != SOCKET_ERROR);
-    closesocket(s);
-    WSACleanup();
-    return ok;
+    return TRUE;
 }
 
-static void KillZombieServiceProcesses() {
+static void KillZombieUIProcesses() {
+    DWORD currentPid = GetCurrentProcessId();
     HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnap == INVALID_HANDLE_VALUE) return;
 
     PROCESSENTRY32W pe = { sizeof(pe) };
     if (Process32FirstW(hSnap, &pe)) {
         do {
-            if (_wcsicmp(pe.szExeFile, L"NetSplitService.exe") == 0) {
-                HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
-                if (hProc) {
-                    TerminateProcess(hProc, 0);
-                    CloseHandle(hProc);
+            if (pe.th32ProcessID != currentPid && _wcsicmp(pe.szExeFile, L"NetSplit.exe") == 0) {
+                WindowCheckData data = { pe.th32ProcessID, false };
+                EnumWindows(EnumWindowsCallback, (LPARAM)&data);
+                if (!data.hasVisible) {
+                    HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                    if (hProc) {
+                        TerminateProcess(hProc, 0);
+                        CloseHandle(hProc);
+                    }
                 }
             }
         } while (Process32NextW(hSnap, &pe));
     }
     CloseHandle(hSnap);
-}
-
-static void RestartOrStartService(const std::wstring& dir) {
-    // 1. If Windows Service is installed in SCM, restart it cleanly
-    SC_HANDLE schSCM = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
-    bool isWindowsService = false;
-    if (schSCM) {
-        SC_HANDLE schSvc = OpenServiceW(schSCM, L"NetSplitService", SERVICE_STOP | SERVICE_START | SERVICE_QUERY_STATUS);
-        if (schSvc) {
-            isWindowsService = true;
-            SERVICE_STATUS status;
-            ControlService(schSvc, SERVICE_CONTROL_STOP, &status);
-            Sleep(400);
-            KillZombieServiceProcesses();
-            Sleep(300);
-            StartServiceW(schSvc, 0, NULL);
-            CloseServiceHandle(schSvc);
-        }
-        CloseServiceHandle(schSCM);
-    }
-
-    // 2. If not a Windows Service, kill any lingering zombie processes and start standalone daemon
-    if (!isWindowsService) {
-        KillZombieServiceProcesses();
-        Sleep(300);
-
-        std::wstring serviceExe = dir + L"\\native\\windows-service\\NetSplitService.exe";
-        STARTUPINFOW siService = { sizeof(siService) };
-        PROCESS_INFORMATION piService = { 0 };
-        siService.dwFlags = STARTF_USESHOWWINDOW;
-        siService.wShowWindow = SW_HIDE;
-        std::wstring serviceCmd = L"\"" + serviceExe + L"\" --background";
-        if (CreateProcessW(NULL, &serviceCmd[0], NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, dir.c_str(), &siService, &piService)) {
-            CloseHandle(piService.hProcess);
-            CloseHandle(piService.hThread);
-        }
-    }
+    Sleep(150);
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
@@ -135,12 +97,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         sei.lpVerb = L"runas";
         sei.lpFile = exePath;
         sei.lpParameters = NULL;
-        sei.nShow = nCmdShow;
+        sei.nShow = (nCmdShow == SW_HIDE || nCmdShow == 0) ? SW_SHOWNORMAL : nCmdShow;
         sei.fMask = SEE_MASK_NOASYNC;
         if (ShellExecuteExW(&sei)) {
             return 0; // Elevated instance launched successfully
         }
-        // If user cancelled UAC, inform them
         MessageBoxW(NULL, 
             L"NetSplit requires Administrator privileges to manage network adapter routing and WFP engine rules.\nPlease run as administrator.",
             L"NetSplit - Elevation Required", 
@@ -149,26 +110,48 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     EnableDebugPrivilege();
+    KillZombieUIProcesses();
 
-    // 2. Launch the NetSplit Desktop GUI Application window (elevated)
+    // 2. Launch the NetSplit Desktop GUI Application window
     STARTUPINFOW siUI = { sizeof(siUI) };
     PROCESS_INFORMATION piUI = { 0 };
+    siUI.cb = sizeof(siUI);
     siUI.dwFlags = STARTF_USESHOWWINDOW;
-    siUI.wShowWindow = SW_HIDE;
+    siUI.wShowWindow = (nCmdShow == SW_HIDE || nCmdShow == 0) ? SW_SHOWNORMAL : nCmdShow;
 
-    std::wstring uiCmd = L"cmd.exe /c npx electron apps/desktop";
-    CreateProcessW(
+    std::wstring runtimeExe = dir + L"\\runtime\\NetSplit.exe";
+    std::wstring appAsar = dir + L"\\runtime\\resources\\app.asar";
+    std::wstring uiCmd;
+    if (GetFileAttributesW(runtimeExe.c_str()) != INVALID_FILE_ATTRIBUTES) {
+        if (GetFileAttributesW(appAsar.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            uiCmd = L"\"" + runtimeExe + L"\" \"" + appAsar + L"\"";
+        } else {
+            uiCmd = L"\"" + runtimeExe + L"\"";
+        }
+    } else {
+        uiCmd = L"cmd.exe /c npx electron apps/desktop";
+    }
+
+    BOOL success = CreateProcessW(
         NULL,
         &uiCmd[0],
         NULL,
         NULL,
         FALSE,
-        CREATE_NO_WINDOW,
+        0,
         NULL,
         dir.c_str(),
         &siUI,
         &piUI
     );
+
+    if (!success) {
+        DWORD err = GetLastError();
+        std::wstring msg = L"Failed to start NetSplit UI runtime.\nError code: " + std::to_wstring(err) + L"\nPath: " + uiCmd;
+        MessageBoxW(NULL, msg.c_str(), L"NetSplit - Startup Error", MB_ICONERROR | MB_OK);
+        return 1;
+    }
+
     if (piUI.hProcess) {
         CloseHandle(piUI.hProcess);
         CloseHandle(piUI.hThread);

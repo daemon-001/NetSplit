@@ -1,38 +1,59 @@
 # NetSplit .gitignore
 
 # Dependencies
-node_modules
+node_modules/
 package-lock.json
 
-# C++ Build Artifacts
+# C++ Build Artifacts and Intermediates
 *.obj
 *.pdb
 *.ilk
 *.lib
 *.exp
 *.idb
+*.res
+*.old
+*.tmp
+*.bak
+compile_temp.bat
 native/windows-service/*.exe
 native/poc-verifier/*.exe
 
-# TypeScript Compilation Outputs
+# Release Packages and Staging
+release
+release_staging/
+*.zip
+
+# Frontend and TypeScript Compilation Outputs
+dist/
 packages/*/dist/
 apps/*/dist/
+.vite/
+.turbo/
+.cache/
 
-# Logs and Runtime Files
+# Logs and Ephemeral Runtime State
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 service.log
 service_err.log
 ipc_auth.token
 assignments.json
 
-# Local scratch / test files
+# Local Scratch and Test Scripts
 test_run.ps1
 test_simple.ps1
 test_wifi_assign.ps1
 scratch/
 
-# IDE / Editor configs
+# IDE, Editor, and System Metadata
 .vscode/
 .vs/
 *.user
 *.suo
+.idea/
+Thumbs.db
+[Dd]esktop.ini
+.DS_Store
