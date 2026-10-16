@@ -106,14 +106,16 @@ async function ensureServiceRunning() {
 async function createWindow() {
   await ensureServiceRunning();
 
-  mainWindow = new BrowserWindow({
+  const iconPath = path.resolve(__dirname, 'icon.png');
 
+  mainWindow = new BrowserWindow({
     width: 1240,
     height: 820,
     minWidth: 980,
     minHeight: 640,
     backgroundColor: '#0f172a',
-    title: 'NetSplit — Per-Application Network Routing',
+    title: 'NetSplit',
+    icon: iconPath,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -241,6 +243,35 @@ ipcMain.handle('uninstall-service', async () => {
   const { exec } = require('child_process');
   
   console.log('[Electron] Requesting clean service uninstallation via helper script...');
+
+  // 1. Request graceful daemon shutdown via HTTP if token is available
+  const currentToken = getToken();
+  if (currentToken) {
+    try {
+      const http = require('http');
+      await new Promise((resolve) => {
+        const payload = JSON.stringify({ jsonrpc: '2.0', id: 'shutdown', method: 'system.shutdown' });
+        const req = http.request({
+          host: '127.0.0.1',
+          port: 48192,
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${currentToken}`,
+            'Content-Length': Buffer.byteLength(payload),
+          },
+          timeout: 1000,
+        }, () => resolve());
+        req.on('error', () => resolve());
+        req.on('timeout', () => { req.destroy(); resolve(); });
+        req.write(payload);
+        req.end();
+      });
+      await new Promise((r) => setTimeout(r, 400));
+    } catch {}
+  }
+
+  // 2. Run uninstall-service.ps1 elevated via UAC RunAs to delete Windows Service and tokens
   const psCmd = `Start-Process powershell -ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"${scriptPath}\"' -Verb RunAs -Wait`;
   await new Promise((resolve) => {
     exec(`powershell -NoProfile -WindowStyle Hidden -Command "${psCmd}"`, () => resolve());
@@ -282,6 +313,11 @@ ipcMain.handle('get-visible-windows', async () => {
   return cachedWindows;
 });
 
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.netsplit.app');
+}
+app.setName('NetSplit');
 
 app.whenReady().then(createWindow);
 

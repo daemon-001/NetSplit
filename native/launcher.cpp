@@ -150,17 +150,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     EnableDebugPrivilege();
 
-    // 2. Ensure NetSplitService is HEALTHY and listening on port 48192
-    if (!IsPortResponding(48192)) {
-        RestartOrStartService(dir);
-        // Wait up to 6 seconds for port 48192 to become ready
-        for (int i = 0; i < 24; i++) {
-            Sleep(250);
-            if (IsPortResponding(48192)) break;
-        }
-    }
-
-    // 3. Launch the NetSplit Desktop GUI Application window (elevated)
+    // 2. Launch the NetSplit Desktop GUI Application window (elevated)
     STARTUPINFOW siUI = { sizeof(siUI) };
     PROCESS_INFORMATION piUI = { 0 };
     siUI.dwFlags = STARTF_USESHOWWINDOW;

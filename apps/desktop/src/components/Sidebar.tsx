@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { useNetSplitStore, ScreenType } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
+import appIcon from '../assets/icon.png';
 import {
   OverviewIcon,
   AppsIcon,
@@ -59,7 +60,11 @@ export const Sidebar: React.FC = () => {
       {/* Brand Header */}
       <View style={styles.header}>
         <View style={styles.logoRow}>
-          <ShieldIcon size={20} color={theme.accent} />
+          <Image
+            source={{ uri: appIcon }}
+            style={{ width: 22, height: 22, borderRadius: 4 }}
+            resizeMode="contain"
+          />
           {!collapsed && (
             <View style={{ marginLeft: 10 }}>
               <Text style={[styles.brandTitle, { color: theme.textPrimary }]}>NetSplit</Text>

@@ -1,26 +1,71 @@
-# NetSplit — Per-Application Network Routing for Windows 11
+# NetSplit: Per-Application Network Routing for Windows 11
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20x64-0078D4?logo=windows)](https://microsoft.com/windows)
 [![UI](https://img.shields.io/badge/UI-React%20Native%20for%20Windows-61DAFB?logo=react)](https://microsoft.github.io/react-native-windows/)
 [![Language](https://img.shields.io/badge/Backend-C%2B%2B17%20%2F%20WFP-00599C?logo=c%2B%2B)](https://learn.microsoft.com/windows/win32/fwp/windows-filtering-platform-start-page)
-[![Tests](https://img.shields.io/badge/Tests-16%20Passing-107c41)](#automated-testing)
-[![Anti--Cheat](https://img.shields.io/badge/Anti--Cheat-Safe%20%26%20Compliant-107c41)](#zero-tampering--anti-cheat-compliance)
+[![Tests](https://img.shields.io/badge/Tests-18%20Passing-107c41)](#automated-testing)
+[![Anti-Cheat](https://img.shields.io/badge/Anti--Cheat-Safe%20and%20Compliant-107c41)](#zero-tampering-and-anti-cheat-compliance)
 
-**NetSplit** is a native Windows 11 utility that enables users to bind individual applications, games, and background programs to specific network adapters (e.g. Ethernet, Wi-Fi, USB tethering, secondary Wi-Fi) without altering application binaries or modifying the global Windows default routing table.
-
----
-
-## 1. Non-Negotiable Guarantees
-
-- **Zero Binary Tampering:** Absolutely no DLL injection (`AppInit_DLLs`, `CreateRemoteThread`), no API hooking (Detours, MinHook, Layered Service Providers), and zero byte modifications to routed application executables.
-- **Anti-Cheat Safe:** Fully transparent to Riot Vanguard, Easy Anti-Cheat, BattlEye, and VAC by executing entirely outside target process virtual memory at standard Windows network stack boundaries (WFP and socket layer).
-- **Strict Least Privilege:** The desktop UI runs under normal Medium Integrity Level user privileges. Privileged operations are isolated to an authenticated C++ Windows Service communicating over local loopback (`127.0.0.1:48192`) with a cryptographically secure ephemeral token.
-- **Strict Verifiable State:** No simulated routing or false indicators. Rule status is backed by live kernel and interface stack verifications.
-- **Exclusive Assignment:** Exactly zero or one explicit adapter assignment per application. Conflicting rules are prevented atomically in the backend.
+NetSplit is a high-performance Windows 11 utility designed to bind individual desktop applications, games, and background tasks to specific network adapters (such as Ethernet, Wi-Fi, 4G/5G USB tethering, or secondary network cards) without modifying application binaries, injecting DLLs, or changing the global Windows default routing table.
 
 ---
 
-## 2. System Architecture
+## Primary Use Cases
+
+### 1. Multiplayer Gaming With Low Ping While Live Streaming (Most Popular)
+- Scenario: A gamer is streaming on Twitch, YouTube, Kick, or Discord using OBS Studio or Streamlabs while competing in multiplayer games like Valorant, Counter-Strike 2, Apex Legends, Call of Duty, Fortnite, or Rocket League.
+- Problem: Live streaming software uploads high-bitrate video streams continuously. When stream uploads share the same network interface as the game, network buffers fill up (bufferbloat), resulting in sudden latency spikes, rubber-banding, packet loss, and jitter that ruin competitive gameplay.
+- Solution with NetSplit:
+  - Network Adapter A (Low-latency fiber or stable wired Ethernet): Dedicated exclusively to the game executable. The game traffic is prioritized on a clean, uncontended channel, maintaining rock-solid 10 ms to 20 ms in-game ping.
+  - Network Adapter B (Secondary Wi-Fi, mobile hotspot, or secondary ISP): Dedicated to OBS Studio, Streamlabs, Twitch chat bots, and streaming encoders. High-throughput video uploads utilize the secondary connection without interfering with game latency.
+
+### 2. High-Speed Game Downloads and Torrents Without Lagging Work or Browsing
+- Scenario: Downloading 50 GB to 150 GB game updates on Steam, Epic Games Launcher, Battle.net, or running torrent clients while working, studying, or attending video conferences.
+- Problem: Game launchers and BitTorrent clients open hundreds of simultaneous connections and saturate downlink and uplink bandwidth, causing browser timeouts and degrading voice calls on Discord, Zoom, or Microsoft Teams.
+- Solution with NetSplit:
+  - Route Steam, Epic Games, or torrent clients through a secondary Wi-Fi or high-capacity connection.
+  - Keep web browsers, Zoom, and Teams on the primary low-jitter network interface.
+
+### 3. Corporate VPN Isolation for Personal Applications
+- Scenario: Working remotely with a required corporate VPN client (such as Cisco AnyConnect, GlobalProtect, or OpenVPN) active on the system.
+- Problem: Enterprise VPN policies often route all system traffic through corporate gateways, causing personal traffic (Spotify, YouTube, personal browsers, Discord) to suffer high latency, bandwidth throttles, and workplace monitoring.
+- Solution with NetSplit:
+  - Assign work-specific tools, SSH clients, and corporate browsers to the VPN virtual network interface.
+  - Assign personal browsers, music streaming, and gaming applications to your local physical Wi-Fi or Ethernet adapter, completely bypassing the corporate VPN tunnel.
+
+### 4. Continuous Cloud Backup Without Disrupting Real-Time Tasks
+- Scenario: Running continuous background cloud synchronization tools like OneDrive, Google Drive, Dropbox, or Backblaze.
+- Problem: Large file syncs and backup uploads trigger upload congestion during working hours, leading to dropped frames during video presentations and stuttering voice chat.
+- Solution with NetSplit:
+  - Isolate cloud backup services to an auxiliary network adapter or an off-peak cellular connection, preserving full bandwidth on the main connection for real-time applications.
+
+### 5. Multi-ISP Testing and Network Development
+- Scenario: Web developers, network engineers, and QA teams validating web services, APIs, and microservices across different Internet Service Providers or routing environments.
+- Problem: Testing how an application performs across different ISPs typically requires swapping cables, disabling network adapters, or testing on separate physical machines.
+- Solution with NetSplit:
+  - Run Browser A or Postman bound to ISP 1 (e.g. Fiber).
+  - Run Browser B or curl bound to ISP 2 (e.g. 5G Cellular or Starlink).
+  - Test routing, regional CDN delivery, and failover behavior side by side on a single machine.
+
+### 6. Crystal-Clear Voice and Communications Isolation
+- Scenario: Participating in critical voice meetings, podcasts, or competitive voice comms via Discord, TeamSpeak, or Zoom.
+- Solution with NetSplit:
+  - Bind voice communication tools to the most stable physical connection (e.g. wired Ethernet) to guarantee zero dropped voice packets, regardless of what other software is downloading on secondary network adapters.
+
+---
+
+## Core Guarantees
+
+- Zero Binary Tampering: No DLL injection (no AppInit_DLLs, no CreateRemoteThread), no API hooking (no Detours, no MinHook, no Layered Service Providers), and zero byte modifications to application executables.
+- Anti-Cheat Safe: Completely transparent to kernel-level anti-cheat engines including Riot Vanguard, Easy Anti-Cheat, BattlEye, and Valve Anti-Cheat (VAC) by operating strictly at the Windows network stack boundary (WFP and socket layer).
+- Privilege Isolation: The desktop user interface runs under standard user permissions (Medium Integrity Level). Privileged actions are restricted to an authenticated C++ Windows Service communicating over local loopback (127.0.0.1:48192) using an ephemeral 256-bit authentication token.
+- Strict Verifiable State: No simulated indicators. Rule status is validated against live kernel filter state and adapter binding status.
+- Strict Exclusive Assignment: Each application is bound to at most one network adapter at any time. Conflicting rules are resolved atomically.
+- Safe Fallback Policies: If an assigned network adapter disconnects, applications gracefully fall back to the Windows default connection or hold traffic according to your preference.
+
+---
+
+## System Architecture
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -31,8 +76,8 @@
 |                                     |                                             |
 |                     Zustand Store / Typed JSON-RPC Client                         |
 +-------------------------------------|---------------------------------------------+
-                                      | JSON-RPC 2.0 over Secure Loopback WebSocket
-                                      | ws://127.0.0.1:48192 (Ephemeral Token Auth)
+                                      | JSON-RPC 2.0 over Secure Loopback HTTP
+                                      | http://127.0.0.1:48192 (Ephemeral Token Auth)
                                       v
 +-----------------------------------------------------------------------------------+
 |                           NetSplit Windows Service                                |
@@ -55,14 +100,30 @@
 
 ---
 
-## 3. Hardware Feasibility Verification (Phase 1 PoC)
+## Technical Routing Mechanism
 
-The interface binding mechanism was proven on live Windows 11 hardware with two concurrent connections (Wi-Fi 6 AX201 and USB Tethering):
+NetSplit uses a two-tier routing mechanism designed specifically for Windows 11:
+
+1. Windows Filtering Platform (WFP) Application Layer Enforcement (ALE):
+   - Injects non-intrusive kernel filters into the `FWPM_LAYER_ALE_CONNECT_REDIRECT_V4` layer.
+   - Matches outbound socket requests by process image path (e.g. `C:\Games\Game.exe`).
+   - Redirects matched connection attempts to an internal loopback broker socket without modifying system routing tables.
+
+2. Socket Interface Binding (IP_UNICAST_IF):
+   - The broker socket sets the `IP_UNICAST_IF` option via `setsockopt` with the target network adapter interface index (`ifIndex`).
+   - The Windows kernel TCP/IP stack binds the outbound connection directly to the specified physical or virtual network interface.
+   - All session filters use dynamic sessions (`FWPM_SESSION_FLAG_DYNAMIC`), ensuring all kernel filters are automatically cleared if the service stops or crashes.
+
+---
+
+## Hardware Feasibility Verification
+
+The dual-interface binding mechanism was verified on live Windows 11 hardware with two concurrent network connections (Wi-Fi 6 AX201 and 4G USB Tethering):
 
 ```
 ====================================================================
-   NetSplit - Phase 1 Technical Feasibility Proof of Concept        
-   Independent Process/Socket-Level Network Interface Binding       
+   NetSplit: Technical Feasibility Proof of Concept Output          
+   Independent Process and Socket-Level Network Interface Binding   
 ====================================================================
 
 --- Testing Adapter: Ethernet 2 (Index: 6, Local IP: 10.232.65.65) ---
@@ -80,22 +141,23 @@ The interface binding mechanism was proven on live Windows 11 hardware with two 
   [SUCCESS] UDP DNS query to 1.1.1.1 succeeded via WiFi (Received 61 bytes).
 ```
 
-*Two concurrent sockets egressed through distinct physical adapters, producing different public IP addresses (`47.31.115.112` vs `49.37.73.231`) without modifying the system routing table.*
+Two concurrent sockets egressed through distinct physical adapters, producing different public IP addresses without modifying the system routing table.
 
 ---
 
-## 4. Repository Structure
+## Repository Structure
 
 ```
 NetSplit/
 ├── apps/
 │   └── desktop/                  # React Native for Windows Desktop Application
 │       ├── src/
-│       │   ├── components/       # Fluent Sidebar, TopBar, StatusBadge, QuickSelector, Modal
+│       │   ├── components/       # TopBar, Sidebar, StatusBadge, QuickSelector, Modal
 │       │   ├── screens/          # Overview, Applications, Adapters, Rules, Activity, Settings
 │       │   ├── services/         # Typed JSON-RPC 2.0 Client (ipcClient.ts)
 │       │   ├── store/            # Centralized Zustand State Management
 │       │   └── theme/            # Fluent 2 Color Tokens, Spacing, Typography
+│       ├── electron/             # Electron Host and Window Management
 │       ├── package.json
 │       └── tsconfig.json
 ├── packages/
@@ -103,84 +165,93 @@ NetSplit/
 ├── native/
 │   ├── windows-service/          # C++17 Privileged Windows Service Daemon
 │   │   ├── src/
-│   │   │   ├── adapter_manager   # GetAdaptersAddresses & Interface Events
-│   │   │   ├── app_discovery     # Process & Installed Application Enumerator
+│   │   │   ├── adapter_manager   # GetAdaptersAddresses and Interface Events
+│   │   │   ├── app_discovery     # Process and Installed Application Enumerator
 │   │   │   ├── assignment_manager# Transactional Exclusive Assignment Store
-│   │   │   ├── wfp_routing_engine# WFP Dynamic Engine & Proxy Broker
+│   │   │   ├── wfp_routing_engine# WFP Dynamic Engine and Proxy Broker
 │   │   │   ├── ipc_server        # Authenticated Loopback JSON-RPC 2.0 Server
-│   │   │   └── service_main      # SCM Service & Console Runner Entrypoint
+│   │   │   └── service_main      # SCM Service and Console Runner Entrypoint
 │   │   └── build.bat             # MSVC x64 build script
-│   └── poc-verifier/             # Phase 1 Socket-Level Verification Harness
+│   ├── launcher.cpp              # Native Desktop Executable Launcher
+│   └── poc-verifier/             # Socket-Level Verification Harness
 ├── scripts/
 │   ├── install-service.ps1       # Elevated Windows Service installer
-│   ├── uninstall-service.ps1     # Clean service removal & recovery
+│   ├── uninstall-service.ps1     # Clean service removal and system recovery
 │   └── verify-routing.ps1        # Real-time multi-adapter routing tester
 ├── tests/
-│   ├── unit/                     # Uniqueness & Protocol validation tests
-│   └── integration/              # Live service daemon & IPC tests
+│   ├── unit/                     # Uniqueness and Protocol validation tests
+│   └── integration/              # Live service daemon and IPC tests
 ├── docs/
-│   ├── architecture.md           # Subsystem architecture & packet path
+│   ├── architecture.md           # Subsystem architecture and packet path
 │   ├── security.md               # Threat model, IPC DACL, anti-cheat safety
-│   ├── routing-limitations.md    # Multi-process & VPN boundaries
-│   ├── installation.md           # Developer setup & service commands
+│   ├── routing-limitations.md    # Multi-process and VPN boundaries
+│   ├── installation.md           # Developer setup and service commands
 │   └── routing-engine-feasibility-report.md # Feasibility experimental report
+├── NetSplit.exe                  # Native Application Executable
+├── Launch-NetSplit.bat           # Desktop Application Batch Launcher
 └── README.md
 ```
 
 ---
 
-## 5. Quickstart & Developer Guide
+## Getting Started
 
-### 1. Compile Native Windows Service
+### 1. Compile Native Components
+Build the native C++ routing service and helper libraries:
 ```powershell
 cmd.exe /c "native\windows-service\build.bat"
 ```
 
 ### 2. Run Automated Verification Tests
+Run the complete automated test suite (18 unit and integration tests):
 ```powershell
-node --test tests/unit/*.test.js tests/integration/*.test.js
+npm test
 ```
-*(Runs 16 automated tests covering assignment uniqueness, IPC protocol validation, and live service daemon lifecycle)*.
 
-### 3. Launch the NetSplit Desktop GUI Application
-
-You can launch the full desktop application in any of the following ways:
-
-- **Direct Native App**: Double-click [`NetSplit.exe`](file:///d:/Workspace/Project/NetSplit/NetSplit.exe) in the root folder.
-- **Silent Script Launcher**: Double-click [`Launch-NetSplit.vbs`](file:///d:/Workspace/Project/NetSplit/Launch-NetSplit.vbs).
-- **Batch Launcher**: Double-click [`Launch-NetSplit.bat`](file:///d:/Workspace/Project/NetSplit/Launch-NetSplit.bat).
-- **From Command Line**:
+### 3. Launch the NetSplit Desktop GUI
+You can launch the desktop application in any of the following ways:
+- Double-click `NetSplit.exe` in the project root directory.
+- Double-click `Launch-NetSplit.bat`.
+- From the command line:
   ```powershell
   npm start
   ```
 
-*(When launched, NetSplit automatically ensures the privileged routing service is active in the background and opens the full Fluent 2 desktop GUI window without popping up raw terminal windows)*.
-
-### 4. Background Service Management (Optional)
-
-If you prefer to run the C++ routing service separately or install it permanently into Windows Service Control Manager (SCM):
-
-```powershell
-# Install as automated Windows Service (Elevated PowerShell):
-powershell -ExecutionPolicy Bypass -File .\scripts\install-service.ps1
-
-# Or run interactively in a console:
-.\native\windows-service\NetSplitService.exe
-```
+### 4. Install the Windows Service (On Demand)
+When opening NetSplit for the first time or after uninstallation, the app runs cleanly in offline mode without auto-installing or forcing background processes.
+- Open the Overview screen in the application.
+- Click the prominent **Install Windows Service** button on the Overview card.
+- Approve the standard Windows UAC prompt once.
+- NetSplit registers the Windows Service, connects the secure IPC client, and activates rule enforcement.
 
 ---
 
-## 6. Clean Uninstallation & System Recovery
+## Managing Routing Rules
 
-NetSplit uses dynamic WFP sessions (`FWPM_SESSION_FLAG_DYNAMIC`). All rules are automatically freed by Windows upon exit. To remove the service cleanly without leaving orphaned configuration:
-
-```powershell
-# In an elevated PowerShell terminal:
-powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1
-```
+- Applications Screen: View all running and discovered applications. Use the adapter dropdown on each application card to assign it to an adapter or set it to follow the default adapter.
+- Quick Assignment: Use the quick selector to bulk-assign multiple applications to a specific connection.
+- Top Bar Master Switch: Pause all routing rules instantly with one click. When paused or when the service is offline, all applications automatically revert to standard Windows routing without terminating sessions.
+- Dynamic Merge Mode: When utilizing the Opposite Default routing rule, the Merge toggle lets you automatically aggregate available interfaces if the secondary connection is disconnected.
 
 ---
 
-## 7. License
+## Clean Uninstallation and System Recovery
+
+NetSplit leaves zero residue in the Windows kernel or system configuration. When uninstalled:
+- All dynamic WFP filters are automatically released by the kernel.
+- The Windows Service entry is removed from the Service Control Manager.
+- Temporary IPC authentication tokens are purged.
+- Interface metric configurations are restored to Windows automatic defaults.
+
+To uninstall:
+- From the Desktop UI: Navigate to Settings, scroll to the bottom, and click Uninstall NetSplit Service.
+- From PowerShell (Administrator):
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1
+  ```
+
+---
+
+## License
 
 Licensed under the MIT License.
