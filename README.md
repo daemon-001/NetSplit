@@ -8,6 +8,8 @@
 
 NetSplit is a high-performance Windows 11 utility designed to bind individual desktop applications, games, and background tasks to specific network adapters (such as Ethernet, Wi-Fi, 4G/5G USB tethering, or secondary network cards) without modifying application binaries, injecting DLLs, or changing the global Windows default routing table.
 
+![NetSplit System Overview](visuals/v1.0.0/1.png)
+
 ---
 
 ## Primary Use Cases
@@ -62,6 +64,45 @@ NetSplit is a high-performance Windows 11 utility designed to bind individual de
 - Strict Verifiable State: No simulated indicators. Rule status is validated against live kernel filter state and adapter binding status.
 - Strict Exclusive Assignment: Each application is bound to at most one network adapter at any time. Conflicting rules are resolved atomically.
 - Safe Fallback Policies: If an assigned network adapter disconnects, applications gracefully fall back to the Windows default connection or hold traffic according to your preference.
+
+---
+
+## Screenshots & Visual Tour
+
+### 1. System Overview Dashboard
+Real-time dashboard displaying kernel WFP engine status, active network adapters, enforced routing rules, and live hardware interface metrics.
+
+![System Overview](visuals/v1.0.0/1.png)
+
+### 2. Application Routing Library & Quick Selector
+Automatic discovery of running foreground applications, background services, and installed software with one-click dynamic routing assignment.
+
+![Application Routing Library](visuals/v1.0.0/2.png)
+
+### 3. Network Adapters & Hardware Inspector
+Detailed hardware telemetry for all detected adapters, including MAC address, link speed, IPv4/IPv6 gateway configuration, and primary route controls.
+
+![Network Adapters and Hardware](visuals/v1.0.0/3.png)
+
+### 4. Active Routing Engine Rules
+Live monitoring and management of kernel-enforced Windows Filtering Platform rules, with per-rule auto-failover merge mode toggles.
+
+![Active Routing Rules](visuals/v1.0.0/4.png)
+
+### 5. Audit & Telemetry Activity Log
+Real-time diagnostic event feed recording rule activations, service initialization events, and interface connection changes.
+
+![Audit and Activity Log](visuals/v1.0.0/5.png)
+
+### 6. Global Preferences & Engine Status
+Verification of kernel driver interception modes, dynamic session security, unassigned application default policies, and adapter disconnect kill-switch controls.
+
+![Preferences and Service Configuration](visuals/v1.0.0/6.png)
+
+### 7. Desktop Preferences & Service Management
+Windows Service lifecycle management controls (elevated restart, clean uninstallation), Windows startup integration, and theme preferences.
+
+![Appearance and Service Management](visuals/v1.0.0/7.png)
 
 ---
 
@@ -191,6 +232,8 @@ NetSplit/
 │   ├── routing-limitations.md    # Multi-process and VPN boundaries
 │   ├── installation.md           # Developer setup and service commands
 │   └── routing-engine-feasibility-report.md # Feasibility experimental report
+├── visuals/                      # Application Screenshots & UI Documentation
+│   └── v1.0.0/                   # Visual walkthrough assets for v1.0.0 release
 ├── NetSplit.exe                  # Native Application Executable
 ├── Launch-NetSplit.bat           # Desktop Application Batch Launcher
 └── README.md
