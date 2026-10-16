@@ -1107,6 +1107,13 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
 
   toggleMasterEngine: async (overrideEnabled) => {
+    const { serviceConnected } = get();
+    if (!serviceConnected) {
+      console.warn('Cannot toggle engine: NetSplit Windows Service is offline or not installed.');
+      set({ isEngineEnabled: false });
+      return;
+    }
+
     const current = get().isEngineEnabled;
     const target = overrideEnabled !== undefined ? overrideEnabled : !current;
     const { rules } = get();

@@ -88,11 +88,11 @@ async function ensureServiceRunning() {
     return;
   }
 
-  // If process is running but not responding, wait briefly for initialization
+  // If process is already running (e.g. Windows Service started on boot), wait briefly for initialization
   if (await checkProcessRunning('NetSplitService.exe')) {
     console.log('[Electron] NetSplitService process detected. Waiting for port 48192...');
-    for (let i = 0; i < 6; i++) {
-      await new Promise((r) => setTimeout(r, 400));
+    for (let i = 0; i < 8; i++) {
+      await new Promise((r) => setTimeout(r, 500));
       if (await checkServiceHealth()) {
         console.log('[Electron] NetSplitService is now healthy.');
         return;
@@ -100,36 +100,7 @@ async function ensureServiceRunning() {
     }
   }
 
-  const serviceExe = getServicePath();
-  if (!fs.existsSync(serviceExe)) return;
-
-  console.log('[Electron] NetSplitService not responding. Launching background service...');
-  try {
-    const psCmd = `Start-Process -FilePath '${serviceExe.replace(/'/g, "''")}' -ArgumentList '--background' -Verb RunAs`;
-    const { exec } = require('child_process');
-    exec(`powershell -NoProfile -Command "${psCmd}"`, (err) => {
-      if (err) {
-        console.warn('[Electron] Could not launch elevated service, falling back to standard spawn:', err.message);
-        serviceProcess = spawn(serviceExe, ['--background'], {
-          detached: true,
-          windowsHide: true,
-          stdio: 'ignore',
-        });
-        serviceProcess.unref();
-      }
-    });
-
-    // Wait for the service to bind port 48192
-    for (let i = 0; i < 16; i++) {
-      await new Promise((r) => setTimeout(r, 400));
-      if (await checkServiceHealth()) {
-        console.log('[Electron] NetSplitService is now active on port 48192.');
-        break;
-      }
-    }
-  } catch (err) {
-    console.warn('[Electron] Could not launch background service:', err.message);
-  }
+  console.log('[Electron] NetSplitService is not running. Awaiting user installation or start from UI.');
 }
 
 async function createWindow() {

@@ -14,6 +14,7 @@ import { defaultIpcClient } from './services/ipcClient';
 
 export const App: React.FC = () => {
   const currentScreen = useNetSplitStore((state) => state.currentScreen);
+  const setCurrentScreen = useNetSplitStore((state) => state.setCurrentScreen);
   const themeMode = useNetSplitStore((state) => state.themeMode);
   const init = useNetSplitStore((state) => state.init);
   const refreshAll = useNetSplitStore((state) => state.refreshAll);
@@ -42,6 +43,7 @@ export const App: React.FC = () => {
         defaultIpcClient.setToken('');
         useNetSplitStore.setState({
           serviceConnected: false,
+          isEngineEnabled: false,
           systemStatus: null,
           rules: [],
           adapters: [],
@@ -86,13 +88,37 @@ export const App: React.FC = () => {
       <View style={styles.mainContent}>
         <TopBar />
 
-        {/* Unreachable Service Banner (if service offline) */}
-        {!serviceConnected && (
-          <View style={[styles.serviceAlert, { backgroundColor: theme.errorSubtle, borderBottomColor: theme.error }]}>
-            <Text style={[styles.serviceAlertText, { color: theme.error }]}>
-              NetSplit Service is currently offline. Background rules are paused.
-              To activate routing, ensure NetSplitService.exe is running in the background.
+        {/* Unreachable Service Banner (if service offline and not on overview) */}
+        {!serviceConnected && currentScreen !== 'overview' && (
+          <View
+            style={[
+              styles.serviceAlert,
+              {
+                backgroundColor: theme.errorSubtle,
+                borderBottomColor: theme.error,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              },
+            ]}
+          >
+            <Text style={[styles.serviceAlertText, { color: theme.error, flex: 1 }]}>
+              NetSplit Windows Service is currently offline. Background rules are paused.
             </Text>
+            <TouchableOpacity
+              onPress={() => setCurrentScreen('overview')}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                backgroundColor: theme.error,
+                borderRadius: 4,
+                marginLeft: 12,
+              }}
+            >
+              <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>
+                Install from Overview
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 

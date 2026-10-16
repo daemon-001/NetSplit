@@ -11,11 +11,13 @@ export const TopBar: React.FC = () => {
   const setSearchQuery = useNetSplitStore((state) => state.setSearchQuery);
   const adapters = useNetSplitStore((state) => state.adapters);
   const rules = useNetSplitStore((state) => state.rules);
+  const serviceConnected = useNetSplitStore((state) => state.serviceConnected);
   const isEngineEnabled = useNetSplitStore((state) => state.isEngineEnabled);
   const toggleMasterEngine = useNetSplitStore((state) => state.toggleMasterEngine);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
+  const isEngineActive = serviceConnected && isEngineEnabled;
   const upAdaptersCount = adapters.filter((a) => a.status === 'UP').length;
   const activeRulesCount = rules.filter((r) => r.status === 'ACTIVE').length;
 
@@ -78,33 +80,40 @@ export const TopBar: React.FC = () => {
             styles.masterSwitchContainer,
             {
               backgroundColor: theme.surfaceSubtle,
-              borderColor: isEngineEnabled
+              borderColor: isEngineActive
                 ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.4)' : '#6ee7b7')
                 : theme.border,
+              opacity: serviceConnected ? 1 : 0.5,
             },
           ]}
         >
           <Switch
-            value={isEngineEnabled}
-            onValueChange={(val) => toggleMasterEngine(val)}
+            value={isEngineActive}
+            disabled={!serviceConnected}
+            onValueChange={(val) => {
+              if (serviceConnected) toggleMasterEngine(val);
+            }}
             trackColor={{
               false: theme.surfaceHover,
               true: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.45)' : '#6ee7b7',
             }}
             thumbColor={
-              isEngineEnabled
+              isEngineActive
                 ? theme.success
                 : (themeMode === 'dark' ? '#94a3b8' : '#cbd5e1')
             }
             style={styles.switchControl}
           />
           <TouchableOpacity
-            onPress={() => toggleMasterEngine()}
-            activeOpacity={0.7}
+            onPress={() => {
+              if (serviceConnected) toggleMasterEngine();
+            }}
+            disabled={!serviceConnected}
+            activeOpacity={serviceConnected ? 0.7 : 1}
             style={styles.masterSwitchLabelBtn}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {isEngineEnabled ? (
+              {isEngineActive ? (
                 <BoltIcon size={12} color={themeMode === 'dark' ? '#34d399' : '#059669'} style={{ marginRight: 4 }} />
               ) : (
                 <PauseIcon size={10} color={theme.textTertiary} style={{ marginRight: 4 }} />
@@ -113,13 +122,13 @@ export const TopBar: React.FC = () => {
                 style={[
                   styles.masterSwitchLabel,
                   {
-                    color: isEngineEnabled
+                    color: isEngineActive
                       ? (themeMode === 'dark' ? '#34d399' : '#059669')
                       : theme.textTertiary,
                   },
                 ]}
               >
-                {isEngineEnabled ? 'Active' : 'Paused'}
+                {!serviceConnected ? 'Offline' : (isEngineEnabled ? 'Active' : 'Paused')}
               </Text>
             </View>
           </TouchableOpacity>
@@ -136,10 +145,12 @@ export const TopBar: React.FC = () => {
           <Text
             style={[
               styles.metricValue,
-              { color: isEngineEnabled ? theme.accent : theme.textTertiary },
+              { color: isEngineActive ? theme.accent : theme.textTertiary },
             ]}
           >
-            {isEngineEnabled ? `${activeRulesCount} Active` : `${rules.length} Paused`}
+            {!serviceConnected
+              ? 'Offline'
+              : (isEngineEnabled ? `${activeRulesCount} Active` : `${rules.length} Paused`)}
           </Text>
         </View>
       </View>

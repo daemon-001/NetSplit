@@ -1,6 +1,7 @@
-import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
+import { defaultIpcClient } from '../services/ipcClient';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { StatusBadge } from '../components/StatusBadge';
 import { WifiIcon, EthernetIcon, ShieldIcon, AppsIcon, RulesIcon, RefreshIcon, BoltIcon, StarIcon, ArrowRightIcon } from '../components/Icons';
@@ -17,6 +18,12 @@ export const OverviewScreen: React.FC = () => {
   const isVerifyingRules = useNetSplitStore((state) => state.isVerifyingRules);
   const isEngineEnabled = useNetSplitStore((state) => state.isEngineEnabled);
   const toggleMasterEngine = useNetSplitStore((state) => state.toggleMasterEngine);
+  const serviceConnected = useNetSplitStore((state) => state.serviceConnected);
+  const refreshAll = useNetSplitStore((state) => state.refreshAll);
+
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [installSuccess, setInstallSuccess] = useState<string | null>(null);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -42,60 +49,162 @@ export const OverviewScreen: React.FC = () => {
     return `${(bps / 1000).toFixed(0)} Kbps`;
   };
 
+  const handleInstallService = async () => {
+    setIsInstalling(true);
+    setInstallError(null);
+    setInstallSuccess(null);
+    try {
+      const res = await (window as any).netSplitHost?.installService?.();
+      if (res?.token) {
+        defaultIpcClient.setToken(res.token);
+      }
+      await refreshAll();
+      setInstallSuccess('NetSplit Windows Service successfully installed and started in background.');
+    } catch (e: any) {
+      console.warn('Install service error:', e);
+      setInstallError(e?.message || 'Failed to install service. Please ensure administrator access was granted.');
+    } finally {
+      setIsInstalling(false);
+    }
+  };
+
+  const isEngineActive = serviceConnected && isEngineEnabled;
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Top Banner / Routing Status */}
-      <View
-        style={[
-          styles.heroCard,
-          {
-            backgroundColor: theme.surfaceCard,
-            borderColor: isEngineEnabled ? theme.border : (themeMode === 'dark' ? '#475569' : '#cbd5e1'),
-          },
-        ]}
-      >
-        <View style={styles.heroLeft}>
-          <ShieldIcon size={28} color={isEngineEnabled ? theme.accent : theme.textTertiary} />
-          <View style={{ marginLeft: 14 }}>
-            <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>
-              {isEngineEnabled
-                ? 'Windows Filtering Platform Engine Active'
-                : 'NetSplit Routing Engine Paused'}
-            </Text>
-            <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
-              {isEngineEnabled
-                ? 'Per-Application socket redirection active with verified interface binding (IP_UNICAST_IF)'
-                : 'Master switch is OFF. All routing rules are bypassed and network traffic flows through standard Windows defaults.'}
-            </Text>
+      {/* Top Banner: Service Installation (if offline) OR Routing Status (if online) */}
+      {!serviceConnected ? (
+        <View
+          style={[
+            styles.heroCard,
+            {
+              backgroundColor: themeMode === 'dark' ? 'rgba(239, 68, 68, 0.08)' : '#fef2f2',
+              borderColor: themeMode === 'dark' ? 'rgba(239, 68, 68, 0.35)' : '#fca5a5',
+            },
+          ]}
+        >
+          <View style={styles.heroLeft}>
+            <ShieldIcon size={30} color={themeMode === 'dark' ? '#f87171' : '#dc2626'} />
+            <View style={{ marginLeft: 14, flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>
+                  NetSplit Windows Service Not Installed / Offline
+                </Text>
+                <View
+                  style={{
+                    backgroundColor: themeMode === 'dark' ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2',
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 4,
+                    marginLeft: 10,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: typography.fontFamilyMono,
+                      fontSize: 10,
+                      fontWeight: 'bold',
+                      color: themeMode === 'dark' ? '#f87171' : '#dc2626',
+                    }}
+                  >
+                    SERVICE REQUIRED
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.heroSubtitle, { color: theme.textSecondary, marginTop: 4 }]}>
+                The background Windows Service daemon is required for kernel network packet filtering and per-app adapter routing. Install and activate the service below to start routing network traffic.
+              </Text>
+              {installError && (
+                <Text style={{ color: theme.error, fontSize: 11, marginTop: 6, fontWeight: '500' }}>
+                  {installError}
+                </Text>
+              )}
+              {installSuccess && (
+                <Text style={{ color: theme.success, fontSize: 11, marginTop: 6, fontWeight: '500' }}>
+                  {installSuccess}
+                </Text>
+              )}
+            </View>
           </View>
-        </View>
 
-        <View style={styles.heroRight}>
-          {isEngineEnabled ? (
+          <View style={styles.heroRight}>
             <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: theme.accent }]}
-              onPress={() => verifyRules()}
-              disabled={isVerifyingRules}
+              style={[
+                styles.actionBtn,
+                {
+                  backgroundColor: theme.accent,
+                  opacity: isInstalling ? 0.7 : 1,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                },
+              ]}
+              onPress={handleInstallService}
+              disabled={isInstalling}
             >
+              {isInstalling ? (
+                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 6 }} />
+              ) : (
+                <BoltIcon size={13} color="#ffffff" style={{ marginRight: 6 }} />
+              )}
               <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
-                {isVerifyingRules ? 'Verifying...' : 'Verify System Rules'}
+                {isInstalling ? 'Installing Service...' : 'Install Windows Service'}
               </Text>
             </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: theme.accent }]}
-              onPress={() => toggleMasterEngine(true)}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <BoltIcon size={13} color="#ffffff" style={{ marginRight: 5 }} />
-                <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
-                  Resume Engine
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
+          </View>
         </View>
-      </View>
+      ) : (
+        <View
+          style={[
+            styles.heroCard,
+            {
+              backgroundColor: theme.surfaceCard,
+              borderColor: isEngineActive ? theme.border : (themeMode === 'dark' ? '#475569' : '#cbd5e1'),
+            },
+          ]}
+        >
+          <View style={styles.heroLeft}>
+            <ShieldIcon size={28} color={isEngineActive ? theme.accent : theme.textTertiary} />
+            <View style={{ marginLeft: 14 }}>
+              <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>
+                {isEngineActive
+                  ? 'Windows Filtering Platform Engine Active'
+                  : 'NetSplit Routing Engine Paused'}
+              </Text>
+              <Text style={[styles.heroSubtitle, { color: theme.textSecondary }]}>
+                {isEngineActive
+                  ? 'Per-Application socket redirection active with verified interface binding (IP_UNICAST_IF)'
+                  : 'Master switch is OFF. All routing rules are bypassed and network traffic flows through standard Windows defaults.'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.heroRight}>
+            {isEngineActive ? (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: theme.accent }]}
+                onPress={() => verifyRules()}
+                disabled={isVerifyingRules}
+              >
+                <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
+                  {isVerifyingRules ? 'Verifying...' : 'Verify System Rules'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: theme.accent }]}
+                onPress={() => toggleMasterEngine(true)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <BoltIcon size={13} color="#ffffff" style={{ marginRight: 5 }} />
+                  <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
+                    Resume Engine
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Metrics Row */}
       <View style={styles.metricsRow}>
