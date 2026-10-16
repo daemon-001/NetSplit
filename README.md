@@ -152,12 +152,12 @@ NetSplit/
 ├── apps/
 │   └── desktop/                  # React Native for Windows Desktop Application
 │       ├── src/
-│       │   ├── components/       # TopBar, Sidebar, StatusBadge, QuickSelector, Modal
+│       │   ├── components/       # TopBar, Sidebar, StatusBadge, QuickSelector, Modal, Icons
 │       │   ├── screens/          # Overview, Applications, Adapters, Rules, Activity, Settings
 │       │   ├── services/         # Typed JSON-RPC 2.0 Client (ipcClient.ts)
-│       │   ├── store/            # Centralized Zustand State Management
+│       │   ├── store/            # Centralized Zustand State Management (useNetSplitStore.ts)
 │       │   └── theme/            # Fluent 2 Color Tokens, Spacing, Typography
-│       ├── electron/             # Electron Host and Window Management
+│       ├── electron/             # Electron Host, Preload, and Window Management
 │       ├── package.json
 │       └── tsconfig.json
 ├── packages/
@@ -171,12 +171,16 @@ NetSplit/
 │   │   │   ├── wfp_routing_engine# WFP Dynamic Engine and Proxy Broker
 │   │   │   ├── ipc_server        # Authenticated Loopback JSON-RPC 2.0 Server
 │   │   │   └── service_main      # SCM Service and Console Runner Entrypoint
-│   │   └── build.bat             # MSVC x64 build script
-│   ├── launcher.cpp              # Native Desktop Executable Launcher
+│   │   └── build.bat             # MSVC x64/x86 build script
+│   ├── router/                   # Winsock Hooking DLLs (NetSplitRouter.dll / NetSplitRouter32.dll)
+│   ├── launcher.cpp              # Native Desktop Executable Launcher (NetSplit.exe)
+│   ├── window_helper.cpp         # Native DWM / Win32 Visible Window Helper
 │   └── poc-verifier/             # Socket-Level Verification Harness
 ├── scripts/
 │   ├── install-service.ps1       # Elevated Windows Service installer
 │   ├── uninstall-service.ps1     # Clean service removal and system recovery
+│   ├── elevate-service.ps1       # Elevated service restarter with UAC elevation
+│   ├── package-release.ps1       # Standalone distribution packaging script
 │   └── verify-routing.ps1        # Real-time multi-adapter routing tester
 ├── tests/
 │   ├── unit/                     # Uniqueness and Protocol validation tests
@@ -218,11 +222,11 @@ You can launch the desktop application in any of the following ways:
   ```
 
 ### 4. Install the Windows Service (On Demand)
-When opening NetSplit for the first time or after uninstallation, the app runs cleanly in offline mode without auto-installing or forcing background processes.
-- Open the Overview screen in the application.
-- Click the prominent **Install Windows Service** button on the Overview card.
+When opening NetSplit for the first time or after uninstallation, the app runs cleanly in offline mode without auto-installing or forcing background processes:
+- From Overview: Click the prominent **Install Windows Service** button on the Overview card.
+- From Settings: Navigate to Settings, locate the Windows Service card, and click **Install as Windows Service**.
 - Approve the standard Windows UAC prompt once.
-- NetSplit registers the Windows Service, connects the secure IPC client, and activates rule enforcement.
+- NetSplit registers the Windows Service with Windows Service Control Manager (SCM), starts it under `NT AUTHORITY\SYSTEM`, connects the secure IPC client, and activates rule enforcement.
 
 ### 5. Build Standalone Production Release
 To build a clean, self-contained release package ready for distribution:
@@ -234,7 +238,7 @@ This automated command:
 2. Compiles the native `NetSplit.exe` launcher with the custom icon resource embedded.
 3. Compiles the production frontend web bundle using Vite.
 4. Executes the complete 18-test unit and integration test suite.
-5. Packages a clean distribution into `release/NetSplit-v1.0.0-windows-x64/` and compresses it into `release/NetSplit-v1.0.0-windows-x64.zip`.
+5. Packages a clean distribution into `release/NetSplit-v1.0.0-windows-x64/` (sealing all JavaScript inside `runtime/resources/app.asar` and removing loose developer files) and compresses it into `release/NetSplit-v1.0.0-windows-x64.zip`.
 
 ---
 
@@ -244,7 +248,7 @@ The packaged distribution in `release/NetSplit-v1.0.0-windows-x64` is completely
 - Operating System: Windows 10 or Windows 11 (64-bit / x64).
 - User Privileges: Standard Windows Administrator rights (prompted via standard UAC on launch to configure routing rules).
 - Node.js or npm: Not required. The standalone Electron runtime is bundled in the `runtime/` folder.
-- Visual C++ Redistributable: Not required. Native binaries link exclusively to standard Windows system DLLs (`kernel32`, `user32`, `advapi32`, `ws2_32`, `iphlpapi`, `fwpuclnt`, `bcrypt`).
+- Visual C++ Redistributable: Not required. Native binaries link exclusively to standard Windows system DLLs (`kernel32`, `user32`, `advapi32`, `ws2_32`, `iphlpapi`, `fwpuclnt`, `dwmapi`, `bcrypt`).
 - Custom Kernel Drivers: Not required. Routing is performed via Microsoft's built-in Windows Filtering Platform (WFP) and IP Helper APIs.
 - Python or Build Tools: Not required. All native binaries and frontend assets are pre-compiled and sealed into `app.asar`.
 
@@ -257,23 +261,39 @@ To run from release:
 
 ## Managing Routing Rules
 
-- Applications Screen: View all running and discovered applications. Use the adapter dropdown on each application card to assign it to an adapter or set it to follow the default adapter.
+- Foreground Application Detection: The Applications screen uses a native Win32/DWM enumeration helper (`window_helper.exe`) that filters active desktop top-level windows in real time (`DwmGetWindowAttribute` with `DWMWA_CLOAKED`), prioritizing the applications and games you are actively interacting with at the top of the list.
+- Comprehensive Application Search: Search by process name, window title, or executable path to route any installed Windows software, game launcher, or background process.
+- Adapter Binding: Use the dropdown on each application card to assign it to an adapter or set it to follow the default adapter.
 - Quick Assignment: Use the quick selector to bulk-assign multiple applications to a specific connection.
 - Top Bar Master Switch: Pause all routing rules instantly with one click. When paused or when the service is offline, all applications automatically revert to standard Windows routing without terminating sessions.
 - Dynamic Merge Mode: When utilizing the Opposite Default routing rule, the Merge toggle lets you automatically aggregate available interfaces if the secondary connection is disconnected.
 
 ---
 
+## Windows Service Lifecycle and Dynamic Management
+
+NetSplit provides dynamic service state awareness in the Settings screen:
+
+- Dynamic SCM Detection: NetSplit queries Windows Service Control Manager in real time to determine whether the background service is registered.
+- Dynamic Interface Controls:
+  - When Installed: Displays an `INSTALLED & ONLINE` (or `INSTALLED (STOPPED)`) badge, the red **Clean Uninstall Service** button, and the **Restart Service Elevated** button. The install button is hidden.
+  - When Not Installed: Displays a `NOT INSTALLED` badge with the blue **Install as Windows Service** button. Uninstallation and restart buttons are hidden.
+- Silent System Service Execution: The service daemon runs under `NT AUTHORITY\SYSTEM` in Session 0, starting with Windows boot without spawning visible command prompt windows or console popups.
+- Desktop App Startup: The **Start with Windows** toggle configures the desktop GUI application (`NetSplit.exe`) to launch minimized to the system tray on user logon via Windows login item settings.
+
+---
+
 ## Clean Uninstallation and System Recovery
 
 NetSplit leaves zero residue in the Windows kernel or system configuration. When uninstalled:
-- All dynamic WFP filters are automatically released by the kernel.
-- The Windows Service entry is removed from the Service Control Manager.
+- All dynamic WFP filters are automatically released by the kernel (`FWPM_SESSION_FLAG_DYNAMIC`).
+- The Windows Service entry is removed from the Service Control Manager (`sc.exe delete NetSplitService`).
 - Temporary IPC authentication tokens are purged.
 - Interface metric configurations are restored to Windows automatic defaults.
+- The UI immediately normalizes back to the uninstalled state without delay.
 
 To uninstall:
-- From the Desktop UI: Navigate to Settings, scroll to the bottom, and click Uninstall NetSplit Service.
+- From the Desktop UI: Navigate to Settings, locate the Windows Service card, click **Clean Uninstall Service**, and confirm in the modal.
 - From PowerShell (Administrator):
   ```powershell
   powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-service.ps1
