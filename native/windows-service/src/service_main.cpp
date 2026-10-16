@@ -97,16 +97,21 @@ void RunDaemon(bool isService) {
     printf("====================================================================\n");
     printf("Config path: %s\n", configPath.c_str());
     printf("Token path:  %s\n", tokenPath.c_str());
+    fflush(stdout);
 
+    printf("[NetSplit] Initializing AdapterManager...\n"); fflush(stdout);
     AdapterManager adapterMgr;
     adapterMgr.Initialize();
 
+    printf("[NetSplit] Initializing AppDiscoveryManager...\n"); fflush(stdout);
     AppDiscoveryManager appMgr;
     appMgr.Initialize();
 
+    printf("[NetSplit] Initializing AssignmentManager...\n"); fflush(stdout);
     AssignmentManager assignMgr(configPath);
     assignMgr.Load();
 
+    printf("[NetSplit] Initializing WfpRoutingEngine...\n"); fflush(stdout);
     WfpRoutingEngine routingEngine(&adapterMgr);
     routingEngine.Initialize();
 
@@ -132,12 +137,18 @@ void RunDaemon(bool isService) {
         } else {
             printf("[NetSplit] Notice: default adapter %s not applied: %s\n", cfg.defaultAdapterId.c_str(), defErr.c_str());
         }
+        fflush(stdout);
     }
 
+    printf("[NetSplit] Starting IPC Server...\n"); fflush(stdout);
     IpcServer ipcServer(48192, tokenPath, &adapterMgr, &appMgr, &assignMgr, &routingEngine);
+    ipcServer.SetShutdownCallback([]() {
+        g_stopRequested = true;
+    });
     ipcServer.Start();
 
     printf("\n[NetSplit] Core service daemon active. Press Ctrl+C to terminate.\n");
+    fflush(stdout);
 
     while (!g_stopRequested) {
         Sleep(500);

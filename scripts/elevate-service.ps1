@@ -18,14 +18,7 @@ if ($svc) {
     Write-Host "[Elevate] Starting Windows Service NetSplitService..."
     Start-Service -Name "NetSplitService" -ErrorAction SilentlyContinue
 } else {
-    Write-Host "[Elevate] Stopping existing NetSplitService processes..."
-    Stop-Process -Name "NetSplitService" -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Milliseconds 500
-
-    if (Test-Path $serviceExe) {
-        Write-Host "[Elevate] Launching NetSplitService: $serviceExe"
-        Start-Process -FilePath $serviceExe -ArgumentList "--background"
-    }
+    Write-Host "[Elevate] NetSplitService is not installed as a Windows Service. Use install-service.ps1 to install."
 }
 
 # 2. Wait up to 10 seconds for port 48192 to come online

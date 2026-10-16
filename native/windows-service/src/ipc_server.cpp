@@ -72,8 +72,13 @@ static std::string ExtractJsonValue(const std::string& json, const std::string& 
     size_t vStart = json.find('"', colon);
     if (vStart == std::string::npos) return "";
     size_t vEnd = vStart + 1;
+    bool inEscape = false;
     while (vEnd < json.size()) {
-        if (json[vEnd] == '"' && json[vEnd - 1] != '\\') {
+        if (inEscape) {
+            inEscape = false;
+        } else if (json[vEnd] == '\\') {
+            inEscape = true;
+        } else if (json[vEnd] == '"') {
             break;
         }
         vEnd++;
@@ -942,10 +947,17 @@ std::string IpcServer::HandleToggleEngine(const std::string& reqId, const std::s
 
 std::string IpcServer::HandleShutdown(const std::string& reqId) {
     LogActivity("INFO", "SYSTEM", "Service Shutdown Initiated", "Service shutdown requested via IPC");
-    std::thread([]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        ExitProcess(0);
-    }).detach();
+    if (m_shutdownCallback) {
+        std::thread([this]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            m_shutdownCallback();
+        }).detach();
+    } else {
+        std::thread([]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            ExitProcess(0);
+        }).detach();
+    }
     return "{\"jsonrpc\":\"2.0\",\"id\":\"" + reqId + "\",\"result\":{\"success\":true,\"message\":\"Service daemon shutting down\"}}";
 }
 

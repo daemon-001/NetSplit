@@ -24,6 +24,25 @@ export const OverviewScreen: React.FC = () => {
   const [isInstalling, setIsInstalling] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [installSuccess, setInstallSuccess] = useState<string | null>(null);
+  const [isServiceInstalled, setIsServiceInstalled] = useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    const checkInstalled = async () => {
+      if (typeof window !== 'undefined' && (window as any).netSplitHost?.isServiceInstalled) {
+        try {
+          const installed = await (window as any).netSplitHost.isServiceInstalled();
+          setIsServiceInstalled(installed);
+        } catch {}
+      }
+    };
+    checkInstalled();
+
+    if (typeof window !== 'undefined' && (window as any).netSplitHost?.onServiceUninstalled) {
+      (window as any).netSplitHost.onServiceUninstalled(() => {
+        setIsServiceInstalled(false);
+      });
+    }
+  }, [serviceConnected]);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -54,15 +73,21 @@ export const OverviewScreen: React.FC = () => {
     setInstallError(null);
     setInstallSuccess(null);
     try {
-      const res = await (window as any).netSplitHost?.installService?.();
+      let res;
+      if (isServiceInstalled) {
+        res = await (window as any).netSplitHost?.elevateService?.();
+      } else {
+        res = await (window as any).netSplitHost?.installService?.();
+      }
       if (res?.token) {
         defaultIpcClient.setToken(res.token);
+        setIsServiceInstalled(true);
       }
       await refreshAll();
-      setInstallSuccess('NetSplit Windows Service successfully installed and started in background.');
+      setInstallSuccess('NetSplit Windows Service is active.');
     } catch (e: any) {
-      console.warn('Install service error:', e);
-      setInstallError(e?.message || 'Failed to install service. Please ensure administrator access was granted.');
+      console.warn('Start/install service error:', e);
+      setInstallError(e?.message || 'Failed to start service. Please ensure administrator access was granted.');
     } finally {
       setIsInstalling(false);
     }
@@ -88,7 +113,11 @@ export const OverviewScreen: React.FC = () => {
             <View style={{ marginLeft: 14, flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
                 <Text style={[styles.heroTitle, { color: theme.textPrimary }]}>
-                  NetSplit Windows Service Not Installed / Offline
+                  {isServiceInstalled === false
+                    ? 'NetSplit Windows Service Not Installed'
+                    : isServiceInstalled === true
+                    ? 'NetSplit Windows Service Offline / Stopped'
+                    : 'NetSplit Windows Service Offline'}
                 </Text>
                 <View
                   style={{
@@ -107,12 +136,18 @@ export const OverviewScreen: React.FC = () => {
                       color: themeMode === 'dark' ? '#f87171' : '#dc2626',
                     }}
                   >
-                    SERVICE REQUIRED
+                    {isServiceInstalled === false
+                      ? 'NOT INSTALLED'
+                      : isServiceInstalled === true
+                      ? 'SERVICE STOPPED'
+                      : 'OFFLINE'}
                   </Text>
                 </View>
               </View>
               <Text style={[styles.heroSubtitle, { color: theme.textSecondary, marginTop: 4 }]}>
-                The background Windows Service daemon is required for kernel network packet filtering and per-app adapter routing. Install and activate the service below to start routing network traffic.
+                {isServiceInstalled === false
+                  ? 'NetSplit requires the privileged Windows Service for kernel network packet filtering and per-app adapter routing. Install the service to activate routing.'
+                  : 'The background Windows Service daemon is required for kernel network packet filtering and per-app adapter routing. Activate the service below to resume routing network traffic.'}
               </Text>
               {installError && (
                 <Text style={{ color: theme.error, fontSize: 11, marginTop: 6, fontWeight: '500' }}>
@@ -147,7 +182,11 @@ export const OverviewScreen: React.FC = () => {
                 <BoltIcon size={13} color="#ffffff" style={{ marginRight: 6 }} />
               )}
               <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
-                {isInstalling ? 'Installing Service...' : 'Install Windows Service'}
+                {isInstalling
+                  ? 'Processing...'
+                  : isServiceInstalled === false
+                  ? 'Install Windows Service'
+                  : 'Start / Activate Service'}
               </Text>
             </TouchableOpacity>
           </View>

@@ -53,7 +53,13 @@ describe('Service Daemon & Live IPC Integration Tests', () => {
         detached: false,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      for (let i = 0; i < 25; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        try {
+          const ping = await fetch('http://127.0.0.1:48192', { method: 'OPTIONS' });
+          if (ping.ok || ping.status === 204) break;
+        } catch {}
+      }
     }
 
     authToken = getActiveToken();

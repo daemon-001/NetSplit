@@ -109,19 +109,39 @@ async function ensureServiceRunning() {
     return;
   }
 
-  // If process is already running (e.g. Windows Service started on boot), wait briefly for initialization
-  if (await checkProcessRunning('NetSplitService.exe')) {
-    console.log('[Electron] NetSplitService process detected. Waiting for port 48192...');
-    for (let i = 0; i < 8; i++) {
-      await new Promise((r) => setTimeout(r, 500));
+  const { exec } = require('child_process');
+
+  // Check if NetSplitService is registered with Windows SCM
+  const isInstalled = await new Promise((resolve) => {
+    exec('sc query NetSplitService', (err, stdout) => {
+      if (err || !stdout || stdout.includes('1060') || stdout.toLowerCase().includes('does not exist')) {
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    });
+  });
+
+  if (isInstalled) {
+    console.log('[Electron] NetSplitService is registered in SCM. Attempting to start service...');
+    try {
+      await new Promise((resolve) => {
+        exec('net start NetSplitService', () => resolve());
+      });
+    } catch {}
+
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 400));
       if (await checkServiceHealth()) {
-        console.log('[Electron] NetSplitService is now healthy.');
+        console.log('[Electron] NetSplitService started via Windows Service.');
         return;
       }
     }
+  } else {
+    console.log('[Electron] NetSplitService is not installed. Awaiting user installation from Overview or Settings page.');
   }
 
-  console.log('[Electron] NetSplitService is not running. Awaiting user installation or start from UI.');
+  console.log('[Electron] NetSplitService check complete.');
 }
 
 function createWindow() {
@@ -337,6 +357,19 @@ ipcMain.handle('uninstall-service', async () => {
   }
 
   return { success: true };
+});
+
+ipcMain.handle('is-service-installed', async () => {
+  const { exec } = require('child_process');
+  return new Promise((resolve) => {
+    exec('sc query NetSplitService', (err, stdout) => {
+      if (err || !stdout || stdout.includes('1060') || stdout.toLowerCase().includes('does not exist')) {
+        resolve(false);
+      } else {
+        resolve(true);
+      }
+    });
+  });
 });
 
 function getWindowHelperPath() {

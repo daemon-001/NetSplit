@@ -1,5 +1,6 @@
 #pragma once
 #include "common_net.hpp"
+#include <functional>
 #include "adapter_manager.hpp"
 #include "app_discovery.hpp"
 #include "assignment_manager.hpp"
@@ -29,11 +30,13 @@ public:
 
     void LogActivity(const std::string& level, const std::string& category, const std::string& title, const std::string& message);
     std::string GetAuthToken() const { return m_authToken; }
+    void SetShutdownCallback(std::function<void()> cb) { m_shutdownCallback = cb; }
 
 private:
     int m_port;
     std::string m_tokenFilePath;
     std::string m_authToken;
+    std::function<void()> m_shutdownCallback;
 
     AdapterManager* m_pAdapterMgr;
     AppDiscoveryManager* m_pAppMgr;

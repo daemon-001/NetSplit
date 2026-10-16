@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('netSplitHost', {
   elevateService: () => ipcRenderer.invoke('elevate-service'),
   installService: () => ipcRenderer.invoke('install-service'),
   uninstallService: () => ipcRenderer.invoke('uninstall-service'),
+  isServiceInstalled: () => ipcRenderer.invoke('is-service-installed'),
   getVisibleWindows: () => ipcRenderer.invoke('get-visible-windows'),
   onServiceRestarted: (cb) => {
     ipcRenderer.on('service-restarted', (_event, data) => cb(data));

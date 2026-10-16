@@ -52,6 +52,26 @@ std::string AssignmentManager::GetCurrentIsoTimestamp() {
     return std::string(buf);
 }
 
+static std::string UnescapeJsonString(const std::string& in) {
+    std::string out;
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+        if (in[i] == '\\' && i + 1 < in.size()) {
+            char next = in[i + 1];
+            if (next == '\\') { out += '\\'; i++; }
+            else if (next == '"') { out += '"'; i++; }
+            else if (next == '/') { out += '/'; i++; }
+            else if (next == 'n') { out += '\n'; i++; }
+            else if (next == 'r') { out += '\r'; i++; }
+            else if (next == 't') { out += '\t'; i++; }
+            else { out += in[i]; }
+        } else {
+            out += in[i];
+        }
+    }
+    return out;
+}
+
 static std::string ExtractJsonStr(const std::string& obj, const std::string& key) {
     size_t k = obj.find("\"" + key + "\"");
     if (k == std::string::npos) return "";
@@ -60,14 +80,19 @@ static std::string ExtractJsonStr(const std::string& obj, const std::string& key
     size_t vStart = obj.find('"', colon);
     if (vStart == std::string::npos) return "";
     size_t vEnd = vStart + 1;
+    bool inEscape = false;
     while (vEnd < obj.size()) {
-        if (obj[vEnd] == '"' && obj[vEnd - 1] != '\\') {
+        if (inEscape) {
+            inEscape = false;
+        } else if (obj[vEnd] == '\\') {
+            inEscape = true;
+        } else if (obj[vEnd] == '"') {
             break;
         }
         vEnd++;
     }
     if (vEnd >= obj.size()) return "";
-    return obj.substr(vStart + 1, vEnd - vStart - 1);
+    return UnescapeJsonString(obj.substr(vStart + 1, vEnd - vStart - 1));
 }
 
 static bool ExtractJsonBoolVal(const std::string& obj, const std::string& key, bool def) {

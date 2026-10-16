@@ -80,6 +80,27 @@ static void KillZombieUIProcesses() {
     Sleep(150);
 }
 
+static void EnsureServiceStarted(const std::wstring& appDir) {
+    // If NetSplitService is registered with SCM, start it if currently stopped.
+    // If it is NOT registered in SCM (e.g. uninstalled by user or first run),
+    // do NOT auto-install or spawn background daemon; let user install via UI.
+    SC_HANDLE scm = OpenSCManagerW(NULL, NULL, SC_MANAGER_ALL_ACCESS);
+    if (scm) {
+        SC_HANDLE svc = OpenServiceW(scm, L"NetSplitService", SERVICE_START | SERVICE_QUERY_STATUS);
+        if (svc) {
+            SERVICE_STATUS_PROCESS ssp = {0};
+            DWORD bytesNeeded = 0;
+            if (QueryServiceStatusEx(svc, SC_STATUS_PROCESS_INFO, (LPBYTE)&ssp, sizeof(ssp), &bytesNeeded)) {
+                if (ssp.dwCurrentState == SERVICE_STOPPED || ssp.dwCurrentState == SERVICE_STOP_PENDING) {
+                    StartServiceW(svc, 0, NULL);
+                }
+            }
+            CloseServiceHandle(svc);
+        }
+        CloseServiceHandle(scm);
+    }
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     wchar_t exePath[MAX_PATH];
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
@@ -111,6 +132,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     EnableDebugPrivilege();
     KillZombieUIProcesses();
+    EnsureServiceStarted(dir);
 
     // 2. Launch the NetSplit Desktop GUI Application window
     STARTUPINFOW siUI = { sizeof(siUI) };

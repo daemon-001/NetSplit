@@ -118,6 +118,15 @@ Copy-Item "$rootDir\scripts\install-service.ps1" "$releaseDir\scripts\"
 Copy-Item "$rootDir\scripts\uninstall-service.ps1" "$releaseDir\scripts\"
 Copy-Item "$rootDir\scripts\elevate-service.ps1" "$releaseDir\scripts\"
 
+# If NetSplitService is installed as a Windows Service, update path and start it
+$installedSvc = Get-Service -Name "NetSplitService" -ErrorAction SilentlyContinue
+if ($installedSvc) {
+    Write-Host "Updating and starting NetSplitService Windows Service..." -ForegroundColor Yellow
+    $svcExe = "$releaseDir\native\windows-service\NetSplitService.exe"
+    & sc.exe config NetSplitService binPath= "`"$svcExe`" --run-service" start= auto >$null 2>&1
+    & sc.exe start NetSplitService >$null 2>&1
+}
+
 # Create zip archive
 Write-Host "Creating compressed release archive $zipPath..." -ForegroundColor Yellow
 Compress-Archive -Path "$releaseDir\*" -DestinationPath $zipPath -Force
