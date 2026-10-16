@@ -358,8 +358,8 @@ bool AssignmentManager::SetAssignment(const std::string& applicationId,
     if (it != m_rulesByAppId.end()) {
         // Atomic replacement of existing rule for this application
         it->second.adapterId = adapterId;
-        it->second.adapterName = adapterName;
-        it->second.fallbackMode = fallbackMode.empty() ? "WINDOWS_DEFAULT" : fallbackMode;
+        std::string defFallback = m_config.adapterDisconnectBehavior.empty() ? "BLOCK" : m_config.adapterDisconnectBehavior;
+        it->second.fallbackMode = fallbackMode.empty() ? defFallback : fallbackMode;
         it->second.updatedAt = timestamp;
         it->second.status = "UNVERIFIED";
         outRule = it->second;
@@ -372,7 +372,8 @@ bool AssignmentManager::SetAssignment(const std::string& applicationId,
         newRule.executablePath = executablePath;
         newRule.adapterId = adapterId;
         newRule.adapterName = adapterName;
-        newRule.fallbackMode = fallbackMode.empty() ? "WINDOWS_DEFAULT" : fallbackMode;
+        std::string defFallback = m_config.adapterDisconnectBehavior.empty() ? "BLOCK" : m_config.adapterDisconnectBehavior;
+        newRule.fallbackMode = fallbackMode.empty() ? defFallback : fallbackMode;
         newRule.enabled = true;
         newRule.status = "UNVERIFIED";
         newRule.createdAt = timestamp;

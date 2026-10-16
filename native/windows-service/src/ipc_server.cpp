@@ -250,6 +250,9 @@ void IpcServer::GenerateAndSaveToken() {
 }
 
 void IpcServer::LogActivity(const std::string& level, const std::string& category, const std::string& title, const std::string& message) {
+    if (m_pAssignMgr && !m_pAssignMgr->GetGlobalConfig().enableAuditLogging) {
+        return;
+    }
     std::lock_guard<std::mutex> lock(m_activityMutex);
 
     auto now = std::chrono::system_clock::now();
@@ -687,7 +690,10 @@ std::string IpcServer::HandleBulkAssign(const std::string& reqId, const std::str
         std::string exePath = ExtractJsonValue(item, "executablePath");
         std::string appName = ExtractJsonValue(item, "applicationName");
         std::string fallbackMode = ExtractJsonValue(item, "fallbackMode");
-        if (fallbackMode.empty()) fallbackMode = "BLOCK";
+        if (fallbackMode.empty()) {
+            fallbackMode = m_pAssignMgr ? m_pAssignMgr->GetGlobalConfig().adapterDisconnectBehavior : "BLOCK";
+            if (fallbackMode.empty()) fallbackMode = "BLOCK";
+        }
 
         if (!appId.empty() && !adapterId.empty()) {
             DiscoveredApp* pApp = m_pAppMgr->FindAppById(appId);

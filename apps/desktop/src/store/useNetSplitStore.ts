@@ -433,8 +433,10 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
     }
   },
 
-  assignApp: async (appId: string, adapterId: string, fallbackMode: FallbackPolicy = 'WINDOWS_DEFAULT') => {
+  assignApp: async (appId: string, adapterId: string, fallbackMode?: FallbackPolicy) => {
     const { apps, adapters, rules, settings, oppositeDefaultAppIds, followDefaultAppIds } = get();
+    const effectiveFallback: FallbackPolicy =
+      fallbackMode || (settings.adapterDisconnectBehavior === 'BLOCK' ? 'BLOCK' : 'WINDOWS_DEFAULT');
     const app = apps.find((a) => a.id === appId);
     if (!app) return;
 
@@ -469,7 +471,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       : followDefaultAppIds.filter((id) => id !== appId);
     saveFollowDefaultApps(nextFollowIds);
 
-    const isMerged = isOpposite ? isOppositeAdapterMerged(adapters, effectiveDefaultId) : false;
+    const isMerged = isOpposite ? isOppositeAdapterMerged(adapters, effectiveDefaultId) : (effectiveFallback !== 'BLOCK');
 
     // 1. Optimistic update immediately for instant UI feedback
     const prevApps = apps;
@@ -484,7 +486,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
             isOppositeDefault: isOpposite,
             isFollowDefault: isFollow,
             isMerged,
-            fallbackMode,
+            fallbackMode: effectiveFallback,
             ruleStatus: 'ACTIVE' as RuleEnforcementStatus,
           }
         : a
@@ -502,7 +504,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
       isFollowDefault: isFollow,
       isMerged,
       enabled: true,
-      fallbackMode,
+      fallbackMode: effectiveFallback,
       status: 'ACTIVE',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -529,7 +531,7 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
         executablePath: app.executablePath,
         applicationName: app.name,
         adapterId: adapter.id,
-        fallbackMode,
+        fallbackMode: effectiveFallback,
       });
       get().refreshAll(false).catch(() => {});
     } catch (err: unknown) {
