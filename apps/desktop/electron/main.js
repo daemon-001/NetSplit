@@ -339,8 +339,51 @@ ipcMain.handle('uninstall-service', async () => {
   return { success: true };
 });
 
+function getWindowHelperPath() {
+  const candidates = [
+    path.resolve(__dirname, '../../../native/window_helper.exe'),
+    path.resolve(process.resourcesPath || '', '../../native/window_helper.exe'),
+    path.resolve(process.resourcesPath || '', '../native/window_helper.exe'),
+    path.resolve(process.resourcesPath || '', 'native/window_helper.exe'),
+    path.resolve(process.cwd(), 'native/window_helper.exe'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0];
+}
+
+let cachedWindows = [];
+let lastWindowFetchTime = 0;
+
 ipcMain.handle('get-visible-windows', async () => {
-  return [];
+  const now = Date.now();
+  if (cachedWindows.length > 0 && now - lastWindowFetchTime < 3000) {
+    return cachedWindows;
+  }
+
+  const helperPath = getWindowHelperPath();
+  if (fs.existsSync(helperPath)) {
+    try {
+      const { execFile } = require('child_process');
+      const stdout = await new Promise((resolve) => {
+        execFile(helperPath, { timeout: 2000, windowsHide: true }, (err, out) => {
+          if (err) return resolve('[]');
+          resolve(out || '[]');
+        });
+      });
+      const parsed = JSON.parse(stdout.trim() || '[]');
+      if (Array.isArray(parsed)) {
+        cachedWindows = parsed;
+        lastWindowFetchTime = now;
+        return cachedWindows;
+      }
+    } catch (err) {
+      console.warn('[Electron] Failed to enumerate windows with window_helper:', err ? err.message : err);
+    }
+  }
+
+  return cachedWindows;
 });
 
 

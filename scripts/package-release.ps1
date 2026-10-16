@@ -14,8 +14,8 @@ Write-Host "`n[1/5] Compiling native Windows Service & Router DLLs..." -Foregrou
 & cmd.exe /c "native\windows-service\build.bat"
 if ($LASTEXITCODE -ne 0) { throw "Native service compilation failed" }
 
-# 2. Compile native NetSplit.exe launcher with embedded icon
-Write-Host "`n[2/5] Compiling native NetSplit.exe launcher with embedded icon..." -ForegroundColor Yellow
+# 2. Compile native NetSplit.exe launcher and window_helper with embedded icon
+Write-Host "`n[2/5] Compiling native NetSplit.exe launcher and window helper..." -ForegroundColor Yellow
 $vcvars = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
 $compileLauncher = @"
 @echo off
@@ -23,9 +23,11 @@ call "$vcvars" >nul
 copy /y icon.ico native\icon.ico >nul
 rc.exe /fo native\launcher.res native\launcher.rc
 cl.exe /nologo /EHsc /O2 /W3 /std:c++17 native\launcher.cpp native\launcher.res /Fe:NetSplit.exe /link /SUBSYSTEM:WINDOWS ws2_32.lib advapi32.lib shell32.lib user32.lib
+cl.exe /nologo /EHsc /O2 /W3 native\window_helper.cpp /Fe:native\window_helper.exe user32.lib dwmapi.lib
 if exist native\icon.ico del native\icon.ico
 if exist native\launcher.res del native\launcher.res
 if exist launcher.obj del launcher.obj
+if exist window_helper.obj del window_helper.obj
 "@
 $compileLauncher | Set-Content "$rootDir\compile_temp.bat"
 & cmd.exe /c "$rootDir\compile_temp.bat"
@@ -47,7 +49,21 @@ $releaseDir = "$rootDir\release\NetSplit-v$version-windows-x64"
 $zipPath = "$rootDir\release\NetSplit-v$version-windows-x64.zip"
 
 Write-Host "`n[5/5] Assembling clean release distribution at $releaseDir..." -ForegroundColor Yellow
-Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq 'NetSplit.exe' } | Invoke-CimMethod -MethodName Terminate -ErrorAction SilentlyContinue
+
+# Gracefully notify any running service to stop via authenticated IPC
+try {
+    $tokenPath = "$env:ProgramData\NetSplit\ipc_auth.token"
+    if (Test-Path $tokenPath) {
+        $token = (Get-Content $tokenPath -Raw).Trim()
+        $body = '{"jsonrpc":"2.0","id":"rel-shut","method":"system.shutdown"}'
+        Invoke-RestMethod -Uri "http://127.0.0.1:48192" -Method Post -Headers @{ "Authorization" = "Bearer $token"; "Content-Type" = "application/json" } -Body $body -TimeoutSec 2 -ErrorAction SilentlyContinue | Out-Null
+        Start-Sleep -Milliseconds 400
+    }
+} catch {}
+
+Stop-Service -Name "NetSplitService" -ErrorAction SilentlyContinue
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -in @('NetSplit.exe', 'NetSplitService.exe') } | Invoke-CimMethod -MethodName Terminate -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 600
 if (Test-Path "$rootDir\release") {
     Remove-Item "$rootDir\release" -Recurse -Force -ErrorAction SilentlyContinue
 }
@@ -92,6 +108,9 @@ Copy-Item "$rootDir\native\windows-service\NetSplitService.exe" "$releaseDir\nat
 Copy-Item "$rootDir\native\windows-service\NetSplitRouter.dll" "$releaseDir\native\windows-service\"
 if (Test-Path "$rootDir\native\windows-service\NetSplitRouter32.dll") {
     Copy-Item "$rootDir\native\windows-service\NetSplitRouter32.dll" "$releaseDir\native\windows-service\"
+}
+if (Test-Path "$rootDir\native\window_helper.exe") {
+    Copy-Item "$rootDir\native\window_helper.exe" "$releaseDir\native\"
 }
 
 # Copy scripts

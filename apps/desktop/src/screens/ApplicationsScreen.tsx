@@ -28,21 +28,58 @@ export const ApplicationsScreen: React.FC = () => {
   const selectAllApps = useNetSplitStore((state) => state.selectAllApps);
   const clearSelection = useNetSplitStore((state) => state.clearSelection);
   const visibleWindowTitles = useNetSplitStore((state) => state.visibleWindowTitles);
+  const visibleWindowPids = useNetSplitStore((state) => state.visibleWindowPids);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
+
+  const visiblePidSet = React.useMemo(() => new Set(visibleWindowPids), [visibleWindowPids]);
+
+  const formatAppName = (app: ApplicationInfo) => {
+    if (app.name === 'Electron' && app.executablePath?.toLowerCase().includes('githubdesktop')) {
+      return 'GitHub Desktop';
+    }
+    if (app.name === 'WhatsApp.Root') {
+      return 'WhatsApp';
+    }
+    return app.name;
+  };
 
   // Detect whether an application is an active GUI app open in the foreground (like Task Manager "Apps")
   const isForegroundApp = (app: ApplicationInfo) => {
     if (!app.isRunning) return false;
 
-    // 1. Native Win32 EnumWindows + WinSta0 detection (exact match to Task Manager)
+    // 1. Native Win32 EnumWindows + WinSta0 detection (service level)
     if (app.hasVisibleWindow === true) return true;
+
+    // 2. Exact PID match from session window enumeration (window_helper.exe)
+    if (app.processIds && app.processIds.length > 0) {
+      if (app.processIds.some((pid) => visiblePidSet.has(pid))) {
+        return true;
+      }
+    }
 
     const path = (app.executablePath || '').toLowerCase();
     const name = (app.name || '').toLowerCase();
-    const filename = path.split('\\').pop() || '';
+    const filename = (path.split('\\').pop() || '').toLowerCase();
+    const exeBase = filename.replace(/\.exe$/, '');
 
-    // 2. Windows system & driver store directories are always background processes
+    // 3. Known background services, daemons, installers & helpers
+    const bgNames = [
+      'services.exe', 'svchost.exe', 'lsass.exe', 'csrss.exe', 'wininit.exe',
+      'winlogon.exe', 'smss.exe', 'dpinst.exe', 'dpinst_x64.exe', 'armourycrate.service.exe',
+      'asusappservice.exe', 'asussystemanalysis.exe', 'asusoptimization.exe',
+      'taskhostw.exe', 'sihost.exe', 'ctfmon.exe', 'conhost.exe',
+      'runtimebroker.exe', 'searchindexer.exe', 'searchhost.exe', 'shellexperiencehost.exe',
+      'startmenuexperiencehost.exe', 'fontdrvhost.exe', 'dwm.exe', 'spoolsv.exe',
+      'audiodg.exe', 'wlanext.exe', 'dashost.exe', 'smartscreen.exe',
+      'steamwebhelper.exe', 'steamservice.exe', 'crashpad_handler.exe',
+      'backgroundtaskhost.exe', 'textinputhost.exe', 'applicationframehost.exe',
+      'armourysocketserver.exe', 'rtsshooksloader64.exe', 'securityhealthsystray.exe',
+      'dllhost.exe', 'mousocoreworker.exe', 'ipf_helper.exe', 'dax3api.exe',
+    ];
+    if (bgNames.includes(filename)) return false;
+
+    // 4. Windows system & driver store directories are always background processes
     const isSystemPath =
       path.includes('\\windows\\system32\\') ||
       path.includes('\\windows\\syswow64\\') ||
@@ -54,18 +91,6 @@ export const ApplicationsScreen: React.FC = () => {
 
     if (app.isSystemProcess || isSystemPath) return false;
 
-    // 3. Known background services, daemons, installers & helpers
-    const bgNames = [
-      'services.exe', 'svchost.exe', 'lsass.exe', 'csrss.exe', 'wininit.exe',
-      'winlogon.exe', 'smss.exe', 'dpinst.exe', 'dpinst_x64.exe', 'armourycrate.service.exe',
-      'asusappservice.exe', 'asussystemanalysis.exe', 'asusoptimization.exe',
-      'taskhostw.exe', 'sihost.exe', 'ctfmon.exe', 'conhost.exe',
-      'runtimebroker.exe', 'searchindexer.exe', 'searchhost.exe', 'shellexperiencehost.exe',
-      'startmenuexperiencehost.exe', 'fontdrvhost.exe', 'dwm.exe', 'spoolsv.exe',
-      'audiodg.exe', 'wlanext.exe', 'dashost.exe', 'smartscreen.exe',
-    ];
-    if (bgNames.includes(filename.toLowerCase())) return false;
-
     if (
       name.toLowerCase().endsWith('service') ||
       name.toLowerCase().includes('service daemon') ||
@@ -74,33 +99,30 @@ export const ApplicationsScreen: React.FC = () => {
       return false;
     }
 
-    // 4. Microsoft Edge WebView2 runtime processes are embedded headless worker processes
+    // Microsoft Edge WebView2 runtime processes are embedded headless worker processes
     if (name.toLowerCase().includes('webview2') || path.includes('edgewebview')) {
       return false;
     }
 
-    // 5. Match against active window titles from host desktopCapturer
+    // 5. Match against active window titles from host window enumeration
     if (visibleWindowTitles && visibleWindowTitles.length > 0) {
-      const match = visibleWindowTitles.some((title) => {
-        const t = title.toLowerCase();
-        return t.includes(name) || name.includes(t) || (t.length > 3 && path.includes(t));
+      const match = visibleWindowTitles.some((rawTitle) => {
+        const t = rawTitle.toLowerCase();
+        if (t.length <= 1) return false;
+        return (
+          t.includes(name) ||
+          name.includes(t) ||
+          (exeBase.length >= 3 && t.includes(exeBase)) ||
+          (exeBase.length >= 3 && exeBase.includes(t)) ||
+          (t.length >= 4 && path.includes(t))
+        );
       });
       if (match) return true;
     }
 
-    // 6. Interactive user applications in Program Files, User Profile, Games, Steam, etc.
+    // 6. Interactive desktop applications & games
     const isUserApp =
-      path.includes('\\games\\') ||
-      path.includes('\\steam\\') ||
-      path.includes('\\discord\\') ||
-      path.includes('\\chrome\\') ||
-      path.includes('\\firefox\\') ||
-      path.includes('\\brave\\') ||
-      path.includes('\\spotify\\') ||
-      path.includes('\\slack\\') ||
-      path.includes('\\telegram\\') ||
-      path.includes('\\obs\\') ||
-      path.includes('\\vlc\\') ||
+      /[\\/](games|steam|discord|spotify|slack|telegram|brave|chrome|firefox|edge|msedge|whatsapp|obs|vlc|githubdesktop|antigravity|code|riot games|epic games|battlenet|battle\.net|ubisoft|origin|ea desktop|torrent|qbittorrent)[\\/]/.test(path) ||
       (app as any).isManual === true;
 
     if (isUserApp) return true;
@@ -389,7 +411,7 @@ export const ApplicationsScreen: React.FC = () => {
               {/* App Identity */}
               <View style={styles.colApp}>
                 <Text style={[styles.appName, { color: theme.textPrimary }]} numberOfLines={1}>
-                  {item.name}
+                  {formatAppName(item)}
                 </Text>
                 <Text style={[styles.appPath, { color: theme.textTertiary }]} numberOfLines={1}>
                   {item.executablePath}

@@ -168,6 +168,7 @@ interface NetSplitState {
   appFilter: AppFilterType;
   selectedAppIds: string[];
   visibleWindowTitles: string[];
+  visibleWindowPids: number[];
 
   // Actions
   fetchVisibleWindows: () => Promise<void>;
@@ -230,16 +231,26 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   appFilter: 'all',
   selectedAppIds: [],
   visibleWindowTitles: [],
+  visibleWindowPids: [],
 
   fetchVisibleWindows: async () => {
     try {
       if (typeof window !== 'undefined' && (window as any).netSplitHost?.getVisibleWindows) {
         const windows = await (window as any).netSplitHost.getVisibleWindows();
         if (Array.isArray(windows)) {
-          const titles = windows
-            .map((w: { name?: string }) => (w.name || '').trim())
-            .filter((t: string) => t.length > 0);
-          set({ visibleWindowTitles: titles });
+          const titles: string[] = [];
+          const pids: number[] = [];
+          for (const w of windows) {
+            const rawTitle = w.title || w.name;
+            if (rawTitle) {
+              const t = String(rawTitle).trim();
+              if (t.length > 0) titles.push(t);
+            }
+            if (typeof w.pid === 'number' && w.pid > 0) {
+              pids.push(w.pid);
+            }
+          }
+          set({ visibleWindowTitles: titles, visibleWindowPids: pids });
         }
       }
     } catch (e) {
@@ -283,6 +294,9 @@ export const useNetSplitStore = create<NetSplitState>((set, get) => ({
   },
 
   refreshAll: async (showLoading = false) => {
+    // Refresh visible windows alongside telemetry
+    get().fetchVisibleWindows().catch(() => {});
+
     try {
       if (!defaultIpcClient.getToken() && typeof window !== 'undefined' && (window as unknown as { netSplitHost?: { getToken: () => Promise<string | null> } }).netSplitHost?.getToken) {
         const token = await (window as unknown as { netSplitHost: { getToken: () => Promise<string | null> } }).netSplitHost.getToken();
