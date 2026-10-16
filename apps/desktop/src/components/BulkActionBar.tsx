@@ -242,44 +242,6 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                 </View>
               </TouchableOpacity>
 
-              {/* Windows Default (Unassigned) option */}
-              <TouchableOpacity
-                style={[
-                  styles.adapterRow,
-                  {
-                    borderBottomColor: theme.borderSubtle,
-                    backgroundColor: theme.surfaceCard,
-                  },
-                ]}
-                onPress={() => handleBulkAssign('UNASSIGN')}
-              >
-                <View
-                  style={[
-                    styles.iconBox,
-                    {
-                      backgroundColor: themeMode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : '#f1f5f9',
-                    },
-                  ]}
-                >
-                  <NetworkIcon size={16} color={theme.textSecondary} />
-                </View>
-
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text
-                    style={[
-                      styles.adapterName,
-                      { color: theme.textPrimary, fontWeight: '600' },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    Windows Default (Unassigned)
-                  </Text>
-                  <Text style={[styles.adapterMeta, { color: theme.textTertiary }]} numberOfLines={1}>
-                    Remove rule and follow normal OS route metric
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
               <View style={{ paddingHorizontal: spacing.sm, paddingTop: 10, paddingBottom: 4 }}>
                 <Text style={{ fontSize: 9, fontWeight: '700', color: theme.textTertiary, letterSpacing: 0.5 }}>
                   SPECIFIC HARDWARE ADAPTERS

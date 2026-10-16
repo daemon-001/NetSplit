@@ -54,7 +54,7 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
     }
   };
 
-  let buttonLabel = 'Default (Windows)';
+  let buttonLabel = `Default (${defaultAdapter?.friendlyName || 'Auto'})`;
   if (isFollow) {
     buttonLabel = `Default (${currentAdapter ? currentAdapter.friendlyName : defaultAdapter?.friendlyName || 'Adapter'})`;
   } else if (isOpposite) {
@@ -154,7 +154,7 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
               style={[
                 styles.optionRow,
                 {
-                  backgroundColor: isFollow
+                  backgroundColor: (isFollow || (!isAssigned && !isOpposite))
                     ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.18)' : '#ecfdf5')
                     : 'transparent',
                 },
@@ -162,7 +162,7 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
               onPress={() => handleSelectAdapter('DEFAULT_ADAPTER')}
             >
               <View style={styles.adapterIconBox}>
-                <StarIcon size={14} color={isFollow ? (themeMode === 'dark' ? '#6ee7b7' : '#059669') : theme.textSecondary} />
+                <StarIcon size={14} color={(isFollow || (!isAssigned && !isOpposite)) ? (themeMode === 'dark' ? '#6ee7b7' : '#059669') : theme.textSecondary} />
               </View>
 
               <View style={{ flex: 1, marginLeft: 8 }}>
@@ -171,7 +171,7 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
                     style={[
                       styles.optionName,
                       {
-                        color: isFollow ? (themeMode === 'dark' ? '#6ee7b7' : '#047857') : theme.textPrimary,
+                        color: (isFollow || (!isAssigned && !isOpposite)) ? (themeMode === 'dark' ? '#6ee7b7' : '#047857') : theme.textPrimary,
                         fontWeight: '600',
                       },
                     ]}
@@ -198,7 +198,7 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
                 </Text>
               </View>
 
-              {isFollow && <CheckIcon size={14} color={themeMode === 'dark' ? '#34d399' : '#059669'} />}
+              {(isFollow || (!isAssigned && !isOpposite)) && <CheckIcon size={14} color={themeMode === 'dark' ? '#34d399' : '#059669'} />}
             </TouchableOpacity>
 
             {/* 2. Dynamic Opposite to Default Adapter option */}
@@ -251,23 +251,6 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
               </View>
 
               {isOpposite && <CheckIcon size={14} color={themeMode === 'dark' ? '#a78bfa' : '#7c3aed'} />}
-            </TouchableOpacity>
-
-            {/* 3. Unassign / Standard Windows routing option */}
-            <TouchableOpacity
-              style={[
-                styles.optionRow,
-                {
-                  backgroundColor: !isAssigned && !isOpposite && !isFollow ? theme.surfaceActive : 'transparent',
-                },
-              ]}
-              onPress={() => handleSelectAdapter('UNASSIGN')}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.optionName, { color: theme.textPrimary }]}>Windows Default (Unassigned)</Text>
-                <Text style={[styles.optionSub, { color: theme.textTertiary }]}>Follow normal system interface metric without rules</Text>
-              </View>
-              {!isAssigned && !isOpposite && !isFollow && <CheckIcon size={14} color={theme.accent} />}
             </TouchableOpacity>
 
             <View style={[styles.divider, { backgroundColor: theme.borderSubtle }]} />
