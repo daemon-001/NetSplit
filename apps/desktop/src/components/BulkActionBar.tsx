@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { useNetSplitStore, getOppositeAdapter, getDefaultAdapter } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
-import { WifiIcon, EthernetIcon, SwapIcon, StarIcon, NetworkIcon } from './Icons';
+import { WifiIcon, EthernetIcon, SwapIcon, StarIcon, NetworkIcon, CloseIcon } from './Icons';
 import { StatusBadge } from './StatusBadge';
 
 interface BulkActionBarProps {
@@ -126,7 +126,7 @@ export const BulkActionBar: React.FC<BulkActionBarProps> = ({
                 style={[styles.closeBtn, { backgroundColor: theme.surfaceHover, borderColor: theme.borderSubtle }]}
                 onPress={() => setShowAdapterPicker(false)}
               >
-                <Text style={[styles.closeBtnText, { color: theme.textSecondary }]}>✕</Text>
+                <CloseIcon size={12} color={theme.textSecondary} />
               </TouchableOpacity>
             </View>
 

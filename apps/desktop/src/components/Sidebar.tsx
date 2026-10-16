@@ -10,6 +10,8 @@ import {
   ActivityIcon,
   SettingsIcon,
   ShieldIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from './Icons';
 
 interface NavItem {
@@ -148,9 +150,11 @@ export const Sidebar: React.FC = () => {
           style={[styles.collapseBtn, { backgroundColor: theme.surfaceHover }]}
           onPress={() => setCollapsed(!collapsed)}
         >
-          <Text style={{ color: theme.textTertiary, fontSize: 10 }}>
-            {collapsed ? '▶' : '◀'}
-          </Text>
+          {collapsed ? (
+            <ChevronRightIcon size={9} color={theme.textTertiary} />
+          ) : (
+            <ChevronLeftIcon size={9} color={theme.textTertiary} />
+          )}
         </TouchableOpacity>
       </View>
     </View>

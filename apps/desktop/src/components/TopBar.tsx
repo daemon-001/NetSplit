@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
-import { SearchIcon, RefreshIcon } from './Icons';
+import { SearchIcon, RefreshIcon, BoltIcon, PauseIcon, SunIcon, MoonIcon, CloseIcon } from './Icons';
 
 export const TopBar: React.FC = () => {
   const currentScreen = useNetSplitStore((state) => state.currentScreen);
@@ -67,8 +67,8 @@ export const TopBar: React.FC = () => {
           onChangeText={setSearchQuery}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 2 }}>
-            <Text style={{ color: theme.textTertiary, fontSize: 11 }}>✕</Text>
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={{ padding: 4 }}>
+            <CloseIcon size={10} color={theme.textTertiary} />
           </TouchableOpacity>
         )}
       </View>
@@ -106,18 +106,25 @@ export const TopBar: React.FC = () => {
             activeOpacity={0.7}
             style={styles.masterSwitchLabelBtn}
           >
-            <Text
-              style={[
-                styles.masterSwitchLabel,
-                {
-                  color: isEngineEnabled
-                    ? (themeMode === 'dark' ? '#34d399' : '#059669')
-                    : theme.textTertiary,
-                },
-              ]}
-            >
-              {isEngineEnabled ? '⚡ Active' : '⏸ Paused'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {isEngineEnabled ? (
+                <BoltIcon size={12} color={themeMode === 'dark' ? '#34d399' : '#059669'} style={{ marginRight: 4 }} />
+              ) : (
+                <PauseIcon size={10} color={theme.textTertiary} style={{ marginRight: 4 }} />
+              )}
+              <Text
+                style={[
+                  styles.masterSwitchLabel,
+                  {
+                    color: isEngineEnabled
+                      ? (themeMode === 'dark' ? '#34d399' : '#059669')
+                      : theme.textTertiary,
+                  },
+                ]}
+              >
+                {isEngineEnabled ? 'Active' : 'Paused'}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -159,9 +166,16 @@ export const TopBar: React.FC = () => {
           ]}
           onPress={toggleTheme}
         >
-          <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
-            {themeMode === 'dark' ? '☀ Light' : '🌙 Dark'}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {themeMode === 'dark' ? (
+              <SunIcon size={12} color="#fbbf24" style={{ marginRight: 5 }} />
+            ) : (
+              <MoonIcon size={12} color="#60a5fa" style={{ marginRight: 5 }} />
+            )}
+            <Text style={{ color: theme.textSecondary, fontSize: 12 }}>
+              {themeMode === 'dark' ? 'Light' : 'Dark'}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
     </View>

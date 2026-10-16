@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { StatusBadge } from '../components/StatusBadge';
-import { WifiIcon, EthernetIcon, ShieldIcon, AppsIcon, RulesIcon, RefreshIcon } from '../components/Icons';
+import { WifiIcon, EthernetIcon, ShieldIcon, AppsIcon, RulesIcon, RefreshIcon, BoltIcon, StarIcon, ArrowRightIcon } from '../components/Icons';
 
 export const OverviewScreen: React.FC = () => {
   const themeMode = useNetSplitStore((state) => state.themeMode);
@@ -86,9 +86,12 @@ export const OverviewScreen: React.FC = () => {
               style={[styles.actionBtn, { backgroundColor: theme.accent }]}
               onPress={() => toggleMasterEngine(true)}
             >
-              <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
-                ⚡ Resume Engine
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <BoltIcon size={13} color="#ffffff" style={{ marginRight: 5 }} />
+                <Text style={[styles.actionBtnText, { color: '#ffffff' }]}>
+                  Resume Engine
+                </Text>
+              </View>
             </TouchableOpacity>
           )}
         </View>
@@ -113,8 +116,9 @@ export const OverviewScreen: React.FC = () => {
             <Text style={[styles.metricVal, { color: theme.accent }]}>{assignedApps.length}</Text>
             <Text style={[styles.metricSubVal, { color: theme.textTertiary }]}>/ {apps.length} discovered</Text>
           </View>
-          <TouchableOpacity onPress={() => setCurrentScreen('apps')}>
-            <Text style={[styles.cardLink, { color: theme.accent }]}>Manage applications →</Text>
+          <TouchableOpacity onPress={() => setCurrentScreen('apps')} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.cardLink, { color: theme.accent }]}>Manage applications</Text>
+            <ArrowRightIcon size={9} color={theme.accent} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
         </View>
 
@@ -126,8 +130,9 @@ export const OverviewScreen: React.FC = () => {
               <Text style={[styles.metricSubVal, { color: theme.error }]}>({errorRules.length} Error)</Text>
             )}
           </View>
-          <TouchableOpacity onPress={() => setCurrentScreen('rules')}>
-            <Text style={[styles.cardLink, { color: theme.accent }]}>View routing table →</Text>
+          <TouchableOpacity onPress={() => setCurrentScreen('rules')} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.cardLink, { color: theme.accent }]}>View routing table</Text>
+            <ArrowRightIcon size={9} color={theme.accent} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
         </View>
 
@@ -138,10 +143,11 @@ export const OverviewScreen: React.FC = () => {
               {currentDefaultName}
             </Text>
           </View>
-          <TouchableOpacity onPress={() => setCurrentScreen('settings')}>
-            <Text style={[styles.cardLink, { color: theme.accent }]}>
-              {preferredDefaultAdapter ? `Unassigned apps → ${preferredDefaultAdapter.friendlyName}` : 'Configure default adapter →'}
+          <TouchableOpacity onPress={() => setCurrentScreen('settings')} style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.cardLink, { color: theme.accent }]} numberOfLines={1}>
+              {preferredDefaultAdapter ? `Unassigned apps to ${preferredDefaultAdapter.friendlyName}` : 'Configure default adapter'}
             </Text>
+            <ArrowRightIcon size={9} color={theme.accent} style={{ marginLeft: 5 }} />
           </TouchableOpacity>
         </View>
       </View>
@@ -149,8 +155,9 @@ export const OverviewScreen: React.FC = () => {
       {/* Live Adapters Grid */}
       <View style={styles.sectionHeader}>
         <Text style={[styles.sectionTitle, { color: theme.textPrimary }]}>Live Network Interfaces</Text>
-        <TouchableOpacity onPress={() => setCurrentScreen('adapters')}>
-          <Text style={[styles.sectionAction, { color: theme.accent }]}>All Interfaces ({adapters.length}) →</Text>
+        <TouchableOpacity onPress={() => setCurrentScreen('adapters')} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={[styles.sectionAction, { color: theme.accent }]}>All Interfaces ({adapters.length})</Text>
+          <ArrowRightIcon size={9} color={theme.accent} style={{ marginLeft: 5 }} />
         </TouchableOpacity>
       </View>
 
@@ -224,9 +231,12 @@ export const OverviewScreen: React.FC = () => {
                   {boundApps.length} Application{boundApps.length === 1 ? '' : 's'} Assigned
                 </Text>
                 {isDefault && (
-                  <View style={[styles.defaultRoutePill, { backgroundColor: theme.accent + '22', borderWidth: 1, borderColor: theme.accent }]}>
+                  <View style={[styles.defaultRoutePill, { backgroundColor: theme.accent + '22', borderWidth: 1, borderColor: theme.accent, flexDirection: 'row', alignItems: 'center' }]}>
+                    {settings.defaultRoutingPolicy === 'PREFER_ADAPTER' && (
+                      <StarIcon size={10} color={theme.accent} style={{ marginRight: 4 }} />
+                    )}
                     <Text style={[styles.defaultRouteText, { color: theme.accent, fontWeight: 'bold' }]}>
-                      {settings.defaultRoutingPolicy === 'PREFER_ADAPTER' ? '★ Default Adapter' : 'Default Gateway'}
+                      {settings.defaultRoutingPolicy === 'PREFER_ADAPTER' ? 'Default Adapter' : 'Default Gateway'}
                     </Text>
                   </View>
                 )}

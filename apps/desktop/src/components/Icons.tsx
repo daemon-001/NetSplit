@@ -4,6 +4,7 @@ import { View, StyleSheet } from 'react-native';
 interface IconProps {
   size?: number;
   color?: string;
+  style?: any;
 }
 
 // Fluent-style clean geometric vector icons
@@ -122,11 +123,266 @@ export const SwapIcon: React.FC<IconProps> = ({ size = 14, color = '#ffffff' }) 
   </View>
 );
 
-export const StarIcon: React.FC<IconProps> = ({ size = 14, color = '#ffffff' }) => (
-  <View style={[styles.center, { width: size, height: size }]}>
+export const StarIcon: React.FC<IconProps> = ({ size = 14, color = '#ffffff', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
     <View style={{ width: size * 0.75, height: size * 0.75, borderRadius: 2, borderWidth: 1.5, borderColor: color, transform: [{ rotate: '45deg' }], alignItems: 'center', justifyContent: 'center' }}>
       <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: color }} />
     </View>
+  </View>
+);
+
+export const BoltIcon: React.FC<IconProps> = ({ size = 14, color = '#10b981', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: size * 0.28,
+        borderRightWidth: size * 0.12,
+        borderBottomWidth: size * 0.52,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: color,
+        transform: [{ rotate: '15deg' }],
+        marginLeft: -size * 0.1,
+        marginBottom: -size * 0.14,
+      }}
+    />
+    <View
+      style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: size * 0.12,
+        borderRightWidth: size * 0.28,
+        borderTopWidth: size * 0.52,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderTopColor: color,
+        transform: [{ rotate: '15deg' }],
+        marginLeft: size * 0.1,
+      }}
+    />
+  </View>
+);
+
+export const PauseIcon: React.FC<IconProps> = ({ size = 14, color = '#94a3b8', style }) => (
+  <View style={[styles.center, { width: size, height: size, flexDirection: 'row', justifyContent: 'center' }, style]}>
+    <View style={{ width: size * 0.22, height: size * 0.75, backgroundColor: color, borderRadius: 1.5, marginRight: size * 0.18 }} />
+    <View style={{ width: size * 0.22, height: size * 0.75, backgroundColor: color, borderRadius: 1.5 }} />
+  </View>
+);
+
+export const SunIcon: React.FC<IconProps> = ({ size = 14, color = '#f59e0b', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        width: size * 0.46,
+        height: size * 0.46,
+        borderRadius: (size * 0.46) / 2,
+        backgroundColor: color,
+      }}
+    />
+    <View
+      style={{
+        position: 'absolute',
+        width: 1.5,
+        height: size * 0.95,
+        borderTopWidth: 2,
+        borderBottomWidth: 2,
+        borderColor: color,
+        backgroundColor: 'transparent',
+      }}
+    />
+    <View
+      style={{
+        position: 'absolute',
+        height: 1.5,
+        width: size * 0.95,
+        borderLeftWidth: 2,
+        borderRightWidth: 2,
+        borderColor: color,
+        backgroundColor: 'transparent',
+      }}
+    />
+  </View>
+);
+
+export const MoonIcon: React.FC<IconProps> = ({ size = 14, color = '#93c5fd', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        width: size * 0.75,
+        height: size * 0.75,
+        borderRadius: (size * 0.75) / 2,
+        borderWidth: 2,
+        borderColor: color,
+        borderRightColor: 'transparent',
+        borderBottomColor: 'transparent',
+        transform: [{ rotate: '-45deg' }],
+      }}
+    />
+  </View>
+);
+
+export const CloseIcon: React.FC<IconProps> = ({ size = 12, color = '#888888', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        position: 'absolute',
+        width: size * 0.85,
+        height: 1.5,
+        backgroundColor: color,
+        borderRadius: 1,
+        transform: [{ rotate: '45deg' }],
+      }}
+    />
+    <View
+      style={{
+        position: 'absolute',
+        width: size * 0.85,
+        height: 1.5,
+        backgroundColor: color,
+        borderRadius: 1,
+        transform: [{ rotate: '-45deg' }],
+      }}
+    />
+  </View>
+);
+
+export const SortAscIcon: React.FC<IconProps> = ({ size = 8, color = '#888888', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: size * 0.4,
+        borderRightWidth: size * 0.4,
+        borderBottomWidth: size * 0.65,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: color,
+      }}
+    />
+  </View>
+);
+
+export const SortDescIcon: React.FC<IconProps> = ({ size = 8, color = '#888888', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: size * 0.4,
+        borderRightWidth: size * 0.4,
+        borderTopWidth: size * 0.65,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderTopColor: color,
+      }}
+    />
+  </View>
+);
+
+export const SortUpDownIcon: React.FC<IconProps> = ({ size = 10, color = '#888888', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: 3,
+        borderRightWidth: 3,
+        borderBottomWidth: 3.5,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: color,
+        marginBottom: 2,
+      }}
+    />
+    <View
+      style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: 3,
+        borderRightWidth: 3,
+        borderTopWidth: 3.5,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderTopColor: color,
+      }}
+    />
+  </View>
+);
+
+export const TrashIcon: React.FC<IconProps> = ({ size = 14, color = '#ef4444', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View style={{ width: size * 0.75, height: 1.5, backgroundColor: color, marginBottom: 1 }} />
+    <View style={{ width: size * 0.35, height: 1.5, backgroundColor: color, position: 'absolute', top: 1 }} />
+    <View
+      style={{
+        width: size * 0.6,
+        height: size * 0.6,
+        borderWidth: 1.5,
+        borderColor: color,
+        borderTopWidth: 0,
+        borderBottomLeftRadius: 2,
+        borderBottomRightRadius: 2,
+        flexDirection: 'row',
+        justifyContent: 'space-evenly',
+        paddingVertical: 1,
+      }}
+    >
+      <View style={{ width: 1, height: '100%', backgroundColor: color }} />
+      <View style={{ width: 1, height: '100%', backgroundColor: color }} />
+    </View>
+  </View>
+);
+
+export const ChevronRightIcon: React.FC<IconProps> = ({ size = 10, color = '#888888', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        width: size * 0.45,
+        height: size * 0.45,
+        borderTopWidth: 1.5,
+        borderRightWidth: 1.5,
+        borderColor: color,
+        transform: [{ rotate: '45deg' }],
+        marginLeft: -size * 0.15,
+      }}
+    />
+  </View>
+);
+
+export const ChevronLeftIcon: React.FC<IconProps> = ({ size = 10, color = '#888888', style }) => (
+  <View style={[styles.center, { width: size, height: size }, style]}>
+    <View
+      style={{
+        width: size * 0.45,
+        height: size * 0.45,
+        borderBottomWidth: 1.5,
+        borderLeftWidth: 1.5,
+        borderColor: color,
+        transform: [{ rotate: '45deg' }],
+        marginRight: -size * 0.15,
+      }}
+    />
+  </View>
+);
+
+export const ArrowRightIcon: React.FC<IconProps> = ({ size = 10, color = '#888888', style }) => (
+  <View style={[styles.center, { width: size, height: size, flexDirection: 'row' }, style]}>
+    <View style={{ width: size * 0.6, height: 1.5, backgroundColor: color }} />
+    <View
+      style={{
+        width: size * 0.35,
+        height: size * 0.35,
+        borderTopWidth: 1.5,
+        borderRightWidth: 1.5,
+        borderColor: color,
+        transform: [{ rotate: '45deg' }],
+        marginLeft: -size * 0.22,
+      }}
+    />
   </View>
 );
 

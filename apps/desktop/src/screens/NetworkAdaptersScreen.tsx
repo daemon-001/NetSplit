@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { StatusBadge } from '../components/StatusBadge';
-import { WifiIcon, EthernetIcon, CheckIcon } from '../components/Icons';
+import { WifiIcon, EthernetIcon, CheckIcon, StarIcon } from '../components/Icons';
 
 export const NetworkAdaptersScreen: React.FC = () => {
   const [selectedAdapterId, setSelectedAdapterId] = useState<string | null>(null);
@@ -115,8 +115,9 @@ export const NetworkAdaptersScreen: React.FC = () => {
                   {activeAdapter.friendlyName}
                 </Text>
                 {activeIsDefault && (
-                  <View style={[styles.defaultBadgeLarge, { backgroundColor: theme.accent + '22', borderColor: theme.accent }]}>
-                    <Text style={[styles.defaultBadgeLargeText, { color: theme.accent }]}>★ DEFAULT ADAPTER</Text>
+                  <View style={[styles.defaultBadgeLarge, { backgroundColor: theme.accent + '22', borderColor: theme.accent, flexDirection: 'row', alignItems: 'center' }]}>
+                    <StarIcon size={10} color={theme.accent} style={{ marginRight: 4 }} />
+                    <Text style={[styles.defaultBadgeLargeText, { color: theme.accent }]}>DEFAULT ADAPTER</Text>
                   </View>
                 )}
               </View>
@@ -138,9 +139,12 @@ export const NetworkAdaptersScreen: React.FC = () => {
             ]}
           >
             <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={[styles.defaultStatusTitle, { color: activeIsDefault ? theme.accent : theme.textPrimary }]}>
-                {activeIsDefault ? '★ System Default Network Adapter' : 'Set as Default Network Adapter'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {activeIsDefault && <StarIcon size={12} color={theme.accent} style={{ marginRight: 5 }} />}
+                <Text style={[styles.defaultStatusTitle, { color: activeIsDefault ? theme.accent : theme.textPrimary }]}>
+                  {activeIsDefault ? 'System Default Network Adapter' : 'Set as Default Network Adapter'}
+                </Text>
+              </View>
               <Text style={[styles.defaultStatusDesc, { color: theme.textSecondary }]}>
                 {activeIsDefault
                   ? 'All unassigned applications, games, and background services route traffic through this adapter (metric 5).'
@@ -161,7 +165,10 @@ export const NetworkAdaptersScreen: React.FC = () => {
                 onPress={() => setDefaultAdapter(activeAdapter.id, 'PREFER_ADAPTER')}
                 disabled={activeAdapter.status !== 'UP'}
               >
-                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>★ Make Default</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <StarIcon size={11} color="#ffffff" style={{ marginRight: 4 }} />
+                  <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: 'bold' }}>Make Default</Text>
+                </View>
               </TouchableOpacity>
             )}
           </View>

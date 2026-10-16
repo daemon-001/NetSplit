@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Switch, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { defaultIpcClient } from '../services/ipcClient';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
-import { ShieldIcon, CheckIcon, NetworkIcon, WifiIcon, EthernetIcon } from '../components/Icons';
+import { ShieldIcon, CheckIcon, AlertIcon, BoltIcon, TrashIcon, NetworkIcon, WifiIcon, EthernetIcon } from '../components/Icons';
 
 export const SettingsScreen: React.FC = () => {
   const themeMode = useNetSplitStore((state) => state.themeMode);
@@ -358,15 +358,22 @@ export const SettingsScreen: React.FC = () => {
             },
           ]}
         >
-          <Text
-            style={{
-              color: statusMessage.type === 'success' ? theme.success : theme.error,
-              fontSize: 12,
-              fontWeight: '500',
-            }}
-          >
-            {statusMessage.type === 'success' ? '✅' : '⚠️'} {statusMessage.text}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {statusMessage.type === 'success' ? (
+              <CheckIcon size={14} color={theme.success} style={{ marginRight: 6 }} />
+            ) : (
+              <AlertIcon size={14} color={theme.error} style={{ marginRight: 6 }} />
+            )}
+            <Text
+              style={{
+                color: statusMessage.type === 'success' ? theme.success : theme.error,
+                fontSize: 12,
+                fontWeight: '500',
+              }}
+            >
+              {statusMessage.text}
+            </Text>
+          </View>
         </View>
       )}
 
@@ -391,9 +398,16 @@ export const SettingsScreen: React.FC = () => {
             onPress={handleInstallService}
             disabled={isInstalling || isRestarting || isUninstalling}
           >
-            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
-              {isInstalling ? '⏳ Installing Service...' : '🛡️ Install as Windows Service'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {isInstalling ? (
+                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 6 }} />
+              ) : (
+                <ShieldIcon size={14} color="#ffffff" style={{ marginRight: 6 }} />
+              )}
+              <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
+                {isInstalling ? 'Installing Service...' : 'Install as Windows Service'}
+              </Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -409,9 +423,16 @@ export const SettingsScreen: React.FC = () => {
             onPress={handleRestartElevated}
             disabled={isInstalling || isRestarting || isUninstalling}
           >
-            <Text style={{ color: theme.textPrimary, fontSize: 12 }}>
-              {isRestarting ? '⏳ Restarting Service...' : '⚡ Restart Service Elevated'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {isRestarting ? (
+                <ActivityIndicator size="small" color={theme.textPrimary} style={{ marginRight: 6 }} />
+              ) : (
+                <BoltIcon size={14} color={theme.textPrimary} style={{ marginRight: 6 }} />
+              )}
+              <Text style={{ color: theme.textPrimary, fontSize: 12 }}>
+                {isRestarting ? 'Restarting Service...' : 'Restart Service Elevated'}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -437,9 +458,16 @@ export const SettingsScreen: React.FC = () => {
             onPress={() => setShowUninstallModal(true)}
             disabled={isInstalling || isRestarting || isUninstalling}
           >
-            <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
-              {isUninstalling ? '⏳ Uninstalling Service...' : '🗑️ Clean Uninstall Service'}
-            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {isUninstalling ? (
+                <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 6 }} />
+              ) : (
+                <TrashIcon size={14} color="#ffffff" style={{ marginRight: 6 }} />
+              )}
+              <Text style={{ color: '#ffffff', fontWeight: 'bold', fontSize: 12 }}>
+                {isUninstalling ? 'Uninstalling Service...' : 'Clean Uninstall Service'}
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -454,7 +482,7 @@ export const SettingsScreen: React.FC = () => {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: theme.surfaceCard, borderColor: theme.borderStrong }]}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
-              <Text style={{ fontSize: 24 }}>⚠️</Text>
+              <AlertIcon size={22} color={theme.error} />
               <Text style={[styles.modalTitle, { color: theme.textPrimary }]}>
                 Confirm Clean Uninstall
               </Text>
@@ -479,9 +507,14 @@ export const SettingsScreen: React.FC = () => {
                 onPress={handleConfirmUninstall}
                 disabled={isUninstalling}
               >
-                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>
-                  {isUninstalling ? '⏳ Uninstalling...' : 'Yes, Clean Uninstall'}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {isUninstalling && (
+                    <ActivityIndicator size="small" color="#ffffff" style={{ marginRight: 6 }} />
+                  )}
+                  <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: 'bold' }}>
+                    {isUninstalling ? 'Uninstalling...' : 'Yes, Clean Uninstall'}
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>

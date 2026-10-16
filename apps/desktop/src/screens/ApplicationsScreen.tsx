@@ -7,6 +7,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { QuickAdapterSelector } from '../components/QuickAdapterSelector';
 import { NativePickerModal } from '../components/NativePickerModal';
 import { BulkActionBar } from '../components/BulkActionBar';
+import { CheckIcon, SortAscIcon, SortDescIcon, SortUpDownIcon } from '../components/Icons';
 
 type SortColumn = 'app' | 'process' | 'adapter' | 'rule';
 type SortOrder = 'asc' | 'desc';
@@ -15,6 +16,7 @@ export const ApplicationsScreen: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [sortColumn, setSortColumn] = useState<SortColumn>('app');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
 
   const themeMode = useNetSplitStore((state) => state.themeMode);
   const apps = useNetSplitStore((state) => state.apps);
@@ -141,6 +143,17 @@ export const ApplicationsScreen: React.FC = () => {
     }
   };
 
+  const renderSortIcon = (col: SortColumn) => {
+    if (sortColumn !== col) {
+      return <SortUpDownIcon size={9} color={theme.textTertiary} style={{ marginLeft: 5 }} />;
+    }
+    return sortOrder === 'asc' ? (
+      <SortAscIcon size={8} color={theme.accent} style={{ marginLeft: 5 }} />
+    ) : (
+      <SortDescIcon size={8} color={theme.accent} style={{ marginLeft: 5 }} />
+    );
+  };
+
   const sortedApps = [...filteredApps].sort((a, b) => {
     let comparison = 0;
     if (sortColumn === 'app') {
@@ -263,7 +276,7 @@ export const ApplicationsScreen: React.FC = () => {
               },
             ]}
           >
-            {allFilteredSelected && <Text style={{ color: '#ffffff', fontSize: 10 }}>✓</Text>}
+            {allFilteredSelected && <CheckIcon size={10} color="#ffffff" />}
           </View>
         </TouchableOpacity>
 
@@ -281,17 +294,7 @@ export const ApplicationsScreen: React.FC = () => {
           >
             APPLICATION
           </Text>
-          <Text
-            style={[
-              styles.sortArrow,
-              {
-                color: sortColumn === 'app' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'app' ? 1 : 0.4,
-              },
-            ]}
-          >
-            {sortColumn === 'app' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-          </Text>
+          {renderSortIcon('app')}
         </TouchableOpacity>
 
         {/* PROCESS STATUS Column Header */}
@@ -308,17 +311,7 @@ export const ApplicationsScreen: React.FC = () => {
           >
             PROCESS STATUS
           </Text>
-          <Text
-            style={[
-              styles.sortArrow,
-              {
-                color: sortColumn === 'process' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'process' ? 1 : 0.4,
-              },
-            ]}
-          >
-            {sortColumn === 'process' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-          </Text>
+          {renderSortIcon('process')}
         </TouchableOpacity>
 
         {/* ASSIGNED ADAPTER Column Header */}
@@ -335,17 +328,7 @@ export const ApplicationsScreen: React.FC = () => {
           >
             ASSIGNED ADAPTER
           </Text>
-          <Text
-            style={[
-              styles.sortArrow,
-              {
-                color: sortColumn === 'adapter' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'adapter' ? 1 : 0.4,
-              },
-            ]}
-          >
-            {sortColumn === 'adapter' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-          </Text>
+          {renderSortIcon('adapter')}
         </TouchableOpacity>
 
         {/* RULE STATUS Column Header */}
@@ -362,17 +345,7 @@ export const ApplicationsScreen: React.FC = () => {
           >
             RULE STATUS
           </Text>
-          <Text
-            style={[
-              styles.sortArrow,
-              {
-                color: sortColumn === 'rule' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'rule' ? 1 : 0.4,
-              },
-            ]}
-          >
-            {sortColumn === 'rule' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-          </Text>
+          {renderSortIcon('rule')}
         </TouchableOpacity>
       </View>
 
@@ -409,7 +382,7 @@ export const ApplicationsScreen: React.FC = () => {
                     },
                   ]}
                 >
-                  {isSelected && <Text style={{ color: '#ffffff', fontSize: 10 }}>✓</Text>}
+                  {isSelected && <CheckIcon size={10} color="#ffffff" />}
                 </View>
               </TouchableOpacity>
 

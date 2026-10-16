@@ -3,7 +3,18 @@ import { View, Text, FlatList, TouchableOpacity, Switch, StyleSheet } from 'reac
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
 import { StatusBadge } from '../components/StatusBadge';
-import { ShieldIcon, RefreshIcon } from '../components/Icons';
+import {
+  ShieldIcon,
+  RefreshIcon,
+  CheckIcon,
+  BoltIcon,
+  PauseIcon,
+  SortAscIcon,
+  SortDescIcon,
+  SortUpDownIcon,
+  StarIcon,
+  SwapIcon,
+} from '../components/Icons';
 import { QuickAdapterSelector } from '../components/QuickAdapterSelector';
 import { BulkActionBar } from '../components/BulkActionBar';
 
@@ -56,8 +67,8 @@ export const RoutingRulesScreen: React.FC = () => {
     { key: 'all', label: `All (${totalCount})` },
     { key: 'merged', label: `Merged (${mergedCount})` },
     { key: 'isolated', label: `Isolated (${isolatedCount})` },
-    ...(followDefaultCount > 0 ? [{ key: 'follow_default', label: `★ Default (${followDefaultCount})` }] : []),
-    ...(oppositeCount > 0 ? [{ key: 'opposite', label: `⇄ Opposite (${oppositeCount})` }] : []),
+    ...(followDefaultCount > 0 ? [{ key: 'follow_default', label: `Default (${followDefaultCount})` }] : []),
+    ...(oppositeCount > 0 ? [{ key: 'opposite', label: `Opposite (${oppositeCount})` }] : []),
     ...(errorCount > 0 ? [{ key: 'error', label: `Errors (${errorCount})` }] : []),
     ...Array.from(adapterMap.entries()).map(([id, data]) => ({
       key: `adapter:${id}`,
@@ -149,6 +160,17 @@ export const RoutingRulesScreen: React.FC = () => {
     }
   };
 
+  const renderSortIcon = (col: RuleSortColumn) => {
+    if (sortColumn !== col) {
+      return <SortUpDownIcon size={9} color={theme.textTertiary} style={{ marginLeft: 5 }} />;
+    }
+    return sortOrder === 'asc' ? (
+      <SortAscIcon size={8} color={theme.accent} style={{ marginLeft: 5 }} />
+    ) : (
+      <SortDescIcon size={8} color={theme.accent} style={{ marginLeft: 5 }} />
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Header Banner */}
@@ -167,9 +189,12 @@ export const RoutingRulesScreen: React.FC = () => {
           onPress={() => verifyRules()}
           disabled={isVerifyingRules}
         >
-          <Text style={[styles.verifyBtnText, { color: '#ffffff' }]}>
-            {isVerifyingRules ? 'Verifying...' : '⚡ Verify All Rules'}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <RefreshIcon size={12} color="#ffffff" style={{ marginRight: 6 }} />
+            <Text style={[styles.verifyBtnText, { color: '#ffffff' }]}>
+              {isVerifyingRules ? 'Verifying...' : 'Verify All Rules'}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -191,17 +216,21 @@ export const RoutingRulesScreen: React.FC = () => {
                 onPress={() => setRuleFilter(tab.key)}
                 activeOpacity={0.7}
               >
-                <Text
-                  style={[
-                    styles.tabBtnText,
-                    {
-                      color: isActive ? theme.textPrimary : theme.textSecondary,
-                      fontWeight: isActive ? typography.weights.semibold : typography.weights.regular,
-                    },
-                  ]}
-                >
-                  {tab.label}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {tab.key === 'follow_default' && <StarIcon size={11} color={isActive ? theme.textPrimary : theme.textSecondary} style={{ marginRight: 4 }} />}
+                  {tab.key === 'opposite' && <SwapIcon size={11} color={isActive ? theme.textPrimary : theme.textSecondary} style={{ marginRight: 4 }} />}
+                  <Text
+                    style={[
+                      styles.tabBtnText,
+                      {
+                        color: isActive ? theme.textPrimary : theme.textSecondary,
+                        fontWeight: isActive ? typography.weights.semibold : typography.weights.regular,
+                      },
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -227,8 +256,10 @@ export const RoutingRulesScreen: React.FC = () => {
             },
           ]}
         >
-          <Text style={{ fontSize: 13, marginRight: 8 }}>⏸</Text>
-          <View style={{ flex: 1 }}>
+          <View style={[styles.pausedIconBadge, { backgroundColor: theme.surfaceHover }]}>
+            <PauseIcon size={12} color={theme.textSecondary} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={[styles.masterPausedTitle, { color: theme.textPrimary }]}>
               NetSplit Routing Engine Paused
             </Text>
@@ -241,7 +272,10 @@ export const RoutingRulesScreen: React.FC = () => {
             onPress={() => toggleMasterEngine(true)}
             activeOpacity={0.8}
           >
-            <Text style={styles.resumeBtnText}>⚡ Enable Engine</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <BoltIcon size={12} color="#ffffff" style={{ marginRight: 4 }} />
+              <Text style={styles.resumeBtnText}>Enable Engine</Text>
+            </View>
           </TouchableOpacity>
         </View>
       )}
@@ -259,7 +293,7 @@ export const RoutingRulesScreen: React.FC = () => {
               },
             ]}
           >
-            {allSelected && <Text style={{ color: '#ffffff', fontSize: 10 }}>✓</Text>}
+            {allSelected && <CheckIcon size={10} color="#ffffff" />}
           </View>
         </TouchableOpacity>
 
@@ -277,17 +311,7 @@ export const RoutingRulesScreen: React.FC = () => {
           >
             APPLICATION & BINARY PATH
           </Text>
-          <Text
-            style={[
-              styles.sortArrow,
-              {
-                color: sortColumn === 'app' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'app' ? 1 : 0.4,
-              },
-            ]}
-          >
-            {sortColumn === 'app' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-          </Text>
+          {renderSortIcon('app')}
         </TouchableOpacity>
 
         {/* TARGET ADAPTER Column Header */}
@@ -304,17 +328,7 @@ export const RoutingRulesScreen: React.FC = () => {
           >
             TARGET ADAPTER
           </Text>
-          <Text
-            style={[
-              styles.sortArrow,
-              {
-                color: sortColumn === 'adapter' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'adapter' ? 1 : 0.4,
-              },
-            ]}
-          >
-            {sortColumn === 'adapter' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-          </Text>
+          {renderSortIcon('adapter')}
         </TouchableOpacity>
 
         {/* MERGE Column Header */}
@@ -331,17 +345,7 @@ export const RoutingRulesScreen: React.FC = () => {
           >
             MERGE
           </Text>
-          <Text
-            style={[
-              styles.sortArrow,
-              {
-                color: sortColumn === 'merge' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'merge' ? 1 : 0.4,
-              },
-            ]}
-          >
-            {sortColumn === 'merge' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-          </Text>
+          {renderSortIcon('merge')}
         </TouchableOpacity>
 
         {/* ENFORCEMENT STATUS Column Header */}
@@ -358,17 +362,7 @@ export const RoutingRulesScreen: React.FC = () => {
           >
             ENFORCEMENT STATUS
           </Text>
-          <Text
-            style={[
-              styles.sortArrow,
-              {
-                color: sortColumn === 'status' ? theme.accent : theme.textTertiary,
-                opacity: sortColumn === 'status' ? 1 : 0.4,
-              },
-            ]}
-          >
-            {sortColumn === 'status' ? (sortOrder === 'asc' ? ' ▲' : ' ▼') : ' ↕'}
-          </Text>
+          {renderSortIcon('status')}
         </TouchableOpacity>
 
         {/* ACTIONS Column Header */}
@@ -409,7 +403,7 @@ export const RoutingRulesScreen: React.FC = () => {
                     },
                   ]}
                 >
-                  {isSelected && <Text style={{ color: '#ffffff', fontSize: 10 }}>✓</Text>}
+                  {isSelected && <CheckIcon size={10} color="#ffffff" />}
                 </View>
               </TouchableOpacity>
 
@@ -707,6 +701,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     borderWidth: 1,
     marginBottom: spacing.md,
+  },
+  pausedIconBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   masterPausedTitle: {
     fontFamily: typography.fontFamilyDisplay,

@@ -56,9 +56,9 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
 
   let buttonLabel = 'Default (Windows)';
   if (isFollow) {
-    buttonLabel = `★ Default (${currentAdapter ? currentAdapter.friendlyName : defaultAdapter?.friendlyName || 'Adapter'})`;
+    buttonLabel = `Default (${currentAdapter ? currentAdapter.friendlyName : defaultAdapter?.friendlyName || 'Adapter'})`;
   } else if (isOpposite) {
-    buttonLabel = `⇄ Opposite (${currentAdapter ? currentAdapter.friendlyName : oppositeAdapter?.friendlyName || 'Alternate'})`;
+    buttonLabel = `Opposite (${currentAdapter ? currentAdapter.friendlyName : oppositeAdapter?.friendlyName || 'Alternate'})`;
   } else if (isAssigned) {
     buttonLabel = currentAdapter ? currentAdapter.friendlyName : assignedAdapterName || 'Assigned';
   }
@@ -99,18 +99,22 @@ export const QuickAdapterSelector: React.FC<QuickAdapterSelectorProps> = ({
         ]}
         onPress={() => setOpen(true)}
       >
-        <Text
-          style={[
-            styles.buttonText,
-            {
-              color: buttonColor,
-              fontWeight: (isAssigned || isOpposite || isFollow) ? typography.weights.semibold : typography.weights.regular,
-            },
-          ]}
-          numberOfLines={1}
-        >
-          {buttonLabel}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 4 }}>
+          {isFollow && <StarIcon size={11} color={buttonColor} style={{ marginRight: 5 }} />}
+          {isOpposite && <SwapIcon size={11} color={buttonColor} style={{ marginRight: 5 }} />}
+          <Text
+            style={[
+              styles.buttonText,
+              {
+                color: buttonColor,
+                fontWeight: (isAssigned || isOpposite || isFollow) ? typography.weights.semibold : typography.weights.regular,
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {buttonLabel}
+          </Text>
+        </View>
         <ChevronDownIcon
           size={10}
           color={
