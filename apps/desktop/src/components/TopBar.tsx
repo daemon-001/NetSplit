@@ -1,8 +1,8 @@
 import React from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNetSplitStore } from '../store/useNetSplitStore';
 import { darkTheme, lightTheme, typography, spacing, radii } from '../theme';
-import { SearchIcon, BoltIcon, PauseIcon, CloseIcon } from './Icons';
+import { SearchIcon, CloseIcon } from './Icons';
 
 export const TopBar: React.FC = () => {
   const currentScreen = useNetSplitStore((state) => state.currentScreen);
@@ -13,7 +13,6 @@ export const TopBar: React.FC = () => {
   const rules = useNetSplitStore((state) => state.rules);
   const serviceConnected = useNetSplitStore((state) => state.serviceConnected);
   const isEngineEnabled = useNetSplitStore((state) => state.isEngineEnabled);
-  const toggleMasterEngine = useNetSplitStore((state) => state.toggleMasterEngine);
 
   const theme = themeMode === 'dark' ? darkTheme : lightTheme;
 
@@ -74,66 +73,6 @@ export const TopBar: React.FC = () => {
 
       {/* Actions & Metrics */}
       <View style={styles.actionsSection}>
-        {/* Top Master Switch - Enables/Disables Working of the App */}
-        <View
-          style={[
-            styles.masterSwitchContainer,
-            {
-              backgroundColor: theme.surfaceSubtle,
-              borderColor: isEngineActive
-                ? (themeMode === 'dark' ? 'rgba(16, 185, 129, 0.4)' : '#6ee7b7')
-                : theme.border,
-              opacity: serviceConnected ? 1 : 0.5,
-            },
-          ]}
-        >
-          <Switch
-            value={isEngineActive}
-            disabled={!serviceConnected}
-            onValueChange={(val) => {
-              if (serviceConnected) toggleMasterEngine(val);
-            }}
-            trackColor={{
-              false: theme.surfaceHover,
-              true: themeMode === 'dark' ? 'rgba(16, 185, 129, 0.45)' : '#6ee7b7',
-            }}
-            thumbColor={
-              isEngineActive
-                ? theme.success
-                : (themeMode === 'dark' ? '#94a3b8' : '#cbd5e1')
-            }
-            style={styles.switchControl}
-          />
-          <TouchableOpacity
-            onPress={() => {
-              if (serviceConnected) toggleMasterEngine();
-            }}
-            disabled={!serviceConnected}
-            activeOpacity={serviceConnected ? 0.7 : 1}
-            style={styles.masterSwitchLabelBtn}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              {isEngineActive ? (
-                <BoltIcon size={12} color={themeMode === 'dark' ? '#34d399' : '#059669'} style={{ marginRight: 4 }} />
-              ) : (
-                <PauseIcon size={10} color={theme.textTertiary} style={{ marginRight: 4 }} />
-              )}
-              <Text
-                style={[
-                  styles.masterSwitchLabel,
-                  {
-                    color: isEngineActive
-                      ? (themeMode === 'dark' ? '#34d399' : '#059669')
-                      : theme.textTertiary,
-                  },
-                ]}
-              >
-                {!serviceConnected ? 'Offline' : (isEngineEnabled ? 'Active' : 'Paused')}
-              </Text>
-            </View>
-          </TouchableOpacity>
-        </View>
-
         {/* Quick telemetry indicators */}
         <View style={[styles.metricPill, { backgroundColor: theme.surfaceSubtle, borderColor: theme.borderSubtle }]}>
           <Text style={[styles.metricLabel, { color: theme.textTertiary }]}>Adapters:</Text>
@@ -196,30 +135,6 @@ const styles = StyleSheet.create({
   actionsSection: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  masterSwitchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingLeft: 4,
-    paddingRight: 8,
-    height: 32,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    marginRight: 8,
-  },
-  switchControl: {
-    transform: [{ scaleX: 0.75 }, { scaleY: 0.75 }],
-    marginRight: 2,
-  },
-  masterSwitchLabelBtn: {
-    paddingVertical: 2,
-    paddingHorizontal: 2,
-  },
-  masterSwitchLabel: {
-    fontFamily: typography.fontFamily,
-    fontSize: 11,
-    fontWeight: typography.weights.bold,
-    letterSpacing: 0.3,
   },
   metricPill: {
     flexDirection: 'row',
